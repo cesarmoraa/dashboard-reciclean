@@ -281,6 +281,7 @@
       border: 0;
       border-radius: 18px;
       padding: 15px 18px;
+      width: 100%;
       background: linear-gradient(135deg, var(--green-800), var(--green-700));
       color: #f7faf6;
       font: inherit;
@@ -310,27 +311,133 @@
     }
 
     @media (max-width: 980px) {
+      body {
+        padding: 18px;
+        place-items: start center;
+      }
+
       .shell {
         grid-template-columns: 1fr;
+        border-radius: 28px;
+      }
+
+      .login-panel {
+        order: -1;
+        padding: 30px 28px;
       }
 
       .brand-panel {
         min-height: auto;
+        padding: 28px;
+        gap: 20px;
       }
     }
 
     @media (max-width: 640px) {
       body {
-        padding: 14px;
+        padding: 10px;
+      }
+
+      .shell {
+        border-radius: 24px;
       }
 
       .brand-panel,
       .login-panel {
-        padding: 26px 22px;
+        padding: 22px 18px;
+      }
+
+      .brand-panel {
+        gap: 16px;
+      }
+
+      h1 {
+        margin: 16px 0 10px;
+        font-size: 1.95rem;
+      }
+
+      .brand-copy {
+        font-size: 0.93rem;
+        line-height: 1.58;
       }
 
       .metric-grid {
-        grid-template-columns: 1fr;
+        display: none;
+      }
+
+      .brand-list {
+        gap: 8px;
+      }
+
+      .brand-list li {
+        font-size: 0.92rem;
+        line-height: 1.48;
+      }
+
+      .login-panel {
+        gap: 16px;
+      }
+
+      .login-title {
+        margin: 8px 0 6px;
+        font-size: 1.95rem;
+      }
+
+      .login-copy {
+        font-size: 0.92rem;
+        line-height: 1.55;
+      }
+
+      .status {
+        min-height: 52px;
+        padding: 12px 14px;
+        border-radius: 16px;
+        font-size: 0.9rem;
+      }
+
+      input[type="password"] {
+        min-height: 54px;
+        padding: 14px 15px;
+        border-radius: 16px;
+      }
+
+      .submit {
+        min-height: 54px;
+        border-radius: 16px;
+      }
+
+      .helper {
+        font-size: 0.8rem;
+        line-height: 1.5;
+      }
+    }
+
+    @media (max-width: 430px) {
+      .eyebrow {
+        width: 100%;
+        justify-content: center;
+        text-align: center;
+      }
+
+      .brand-panel,
+      .login-panel {
+        padding: 20px 16px;
+      }
+
+      .brand-list li:last-child {
+        display: none;
+      }
+
+      .login-title {
+        font-size: 1.8rem;
+      }
+
+      label {
+        font-size: 0.76rem;
+      }
+
+      .status {
+        font-size: 0.88rem;
       }
     }
   </style>

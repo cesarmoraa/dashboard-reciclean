@@ -1307,9 +1307,12 @@ html = f"""<!DOCTYPE html>
 
       .aside-kpis,
       .kpi-grid,
-      .insights-grid,
       .filters-grid {{
         grid-template-columns: 1fr;
+      }}
+
+      .insights-grid {{
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }}
 
       .section-title {{
@@ -1331,9 +1334,226 @@ html = f"""<!DOCTYPE html>
       }}
     }}
 
+    @media (max-width: 640px) {{
+      .page {{
+        padding: 14px 12px 28px;
+      }}
+
+      .hero {{
+        gap: 16px;
+        padding: 18px 16px;
+      }}
+
+      .eyebrow {{
+        font-size: 11px;
+        padding: 7px 10px;
+      }}
+
+      h1 {{
+        margin: 12px 0 8px;
+        font-size: 1.95rem;
+      }}
+
+      .subtitle {{
+        font-size: 0.94rem;
+        line-height: 1.52;
+      }}
+
+      .hero-meta {{
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 16px;
+      }}
+
+      .chip {{
+        min-height: 46px;
+        padding: 10px 12px;
+        font-size: 0.84rem;
+        align-items: flex-start;
+      }}
+
+      #source-chip {{
+        display: none;
+      }}
+
+      .summary-list {{
+        gap: 10px;
+        margin-top: 18px;
+      }}
+
+      .summary-item {{
+        font-size: 0.92rem;
+        line-height: 1.48;
+      }}
+
+      .hero-aside {{
+        gap: 10px;
+      }}
+
+      .aside-card {{
+        padding: 14px;
+        border-radius: 18px;
+      }}
+
+      .auth-actions {{
+        flex-direction: column;
+        align-items: stretch;
+      }}
+
+      .ghost-button {{
+        width: 100%;
+        min-height: 50px;
+      }}
+
+      .aside-kpis {{
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }}
+
+      .mini-stat {{
+        padding: 12px;
+      }}
+
+      .mini-stat .value {{
+        font-size: 1.15rem;
+      }}
+
+      .kpi-grid {{
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }}
+
+      .kpi-card {{
+        min-height: unset;
+        padding: 16px 14px;
+        gap: 10px;
+      }}
+
+      .icon-box {{
+        width: 40px;
+        height: 40px;
+      }}
+
+      .kpi-label {{
+        font-size: 0.76rem;
+      }}
+
+      .kpi-value {{
+        font-size: 1.55rem;
+      }}
+
+      .kpi-foot {{
+        font-size: 0.84rem;
+        line-height: 1.38;
+      }}
+
+      .section-title {{
+        margin: 24px 0 12px;
+      }}
+
+      .section-title h2 {{
+        font-size: 1.5rem;
+      }}
+
+      .section-title p,
+      .section-badge {{
+        font-size: 0.88rem;
+      }}
+
+      .panel-grid {{
+        gap: 12px;
+      }}
+
+      .panel {{
+        padding: 14px;
+        border-radius: 18px;
+      }}
+
+      .panel-header {{
+        flex-direction: column;
+        margin-bottom: 12px;
+      }}
+
+      .panel-title {{
+        font-size: 0.98rem;
+      }}
+
+      .panel-subtitle {{
+        font-size: 0.86rem;
+        line-height: 1.42;
+      }}
+
+      .panel-note {{
+        width: 100%;
+      }}
+
+      .rank-item {{
+        padding: 12px;
+      }}
+
+      .rank-top {{
+        flex-direction: column;
+        align-items: flex-start;
+      }}
+
+      .rank-value {{
+        text-align: left;
+      }}
+
+      .rank-secondary {{
+        font-size: 0.82rem;
+        line-height: 1.45;
+      }}
+
+      .quality-card {{
+        padding: 14px;
+      }}
+
+      .quality-card .value {{
+        font-size: 1.55rem;
+      }}
+
+      .insights-grid {{
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }}
+
+      .insight-card {{
+        min-height: unset;
+        padding: 14px;
+      }}
+
+      .filters-grid {{
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }}
+
+      .filters-card {{
+        padding: 14px;
+      }}
+
+      .field input,
+      .field select {{
+        min-height: 48px;
+      }}
+
+      .results-meta {{
+        gap: 6px;
+        font-size: 0.86rem;
+      }}
+
+      .mobile-cards {{
+        gap: 10px;
+      }}
+
+      .mobile-card {{
+        padding: 14px;
+      }}
+    }}
+
     @media (max-width: 480px) {{
       h1 {{
-        font-size: 2rem;
+        font-size: 1.78rem;
       }}
 
       .kpi-card,
@@ -1341,6 +1561,37 @@ html = f"""<!DOCTYPE html>
       .insight-card,
       .filters-card {{
         border-radius: 18px;
+      }}
+
+      .hero-meta,
+      .kpi-grid,
+      .filters-grid,
+      .aside-kpis {{
+        grid-template-columns: 1fr;
+      }}
+
+      #updated-chip {{
+        display: none;
+      }}
+
+      .eyebrow,
+      .section-badge,
+      .pill {{
+        width: 100%;
+        justify-content: center;
+        text-align: center;
+      }}
+
+      .summary-item {{
+        padding-left: 16px;
+      }}
+
+      .summary-item::before {{
+        top: 9px;
+      }}
+
+      .mobile-head {{
+        flex-direction: column;
       }}
 
       .mobile-grid {{

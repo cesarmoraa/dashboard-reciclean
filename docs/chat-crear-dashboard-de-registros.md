@@ -104,7 +104,7 @@ http://localhost:3000
   - `Calidad y Brechas`
 - Filtro `Sucursal` del detalle desacoplado de la vista global.
 - `Exportar Excel` del detalle filtrado.
-- `Exportar PDF` del tab activo con filtros visibles.
+- `Exportar PDF` del tab activo con filtros visibles, usando impresión directa del navegador en vez de popup externo.
 
 ## Errores encontrados
 - La carpeta actual no estaba dentro de un repositorio Git al inicio del trabajo.
@@ -112,6 +112,7 @@ http://localhost:3000
 - Fue necesario introducir backend para validar password y mantener sesión por cookie.
 - El resumen original del dashboard estaba pensado para un solo mes, por lo que hubo que ajustar el generador para soportar una ventana de dos meses sin romper KPIs, series ni filtros.
 - El exporte PDF requirió una solución basada en vista imprimible del tab activo, para no introducir librerías pesadas innecesarias en esta etapa.
+- La versión inicial con ventana emergente para imprimir se ajustó después para mejorar compatibilidad en Render y entornos embebidos.
 
 ## Aprendizajes reutilizables
 - No confiar en pruebas desde `file://` cuando hay autenticación.

@@ -105,7 +105,7 @@ Sirve para retomar trabajo sin perder contexto técnico, funcional ni operativo.
   - `Exportar Excel`
   - `Exportar PDF`
 - `Exportar Excel` descarga el detalle operativo filtrado en formato `.xls`
-- `Exportar PDF` abre una vista imprimible del tab activo con:
+- `Exportar PDF` usa impresión directa del navegador sobre una vista interna preparada, sin depender de ventanas emergentes, con:
   - hero
   - filtros activos
   - contenido de la pestaña visible
@@ -117,7 +117,17 @@ Sirve para retomar trabajo sin perder contexto técnico, funcional ni operativo.
   - implementado en el generador
   - HTML regenerado
   - validado en local
-  - pendiente de commit/push/publicación al momento de esta actualización
+  - publicado
+
+### 7. Ajuste de armonía visual e interacción
+- Se corrigió el bloque superior para recuperar mejor simetría:
+  - tabs en ancho completo y distribución uniforme
+  - acciones del hero en grilla consistente
+  - mensaje de estado breve para feedback del usuario
+- Se corrigió el problema reportado en publicación donde el PDF podía percibirse como "no hace nada" por depender de `window.open`
+- Estado:
+  - implementado
+  - publicado
 
 ## Historial cronológico resumido
 
@@ -225,6 +235,21 @@ Solución:
 Estado:
 - Resuelto
 
+### 7. Exportación PDF percibida como inactiva en publicación
+Problema:
+- En Render el botón de PDF podía parecer inactivo o silencioso
+
+Causa real:
+- Dependía de abrir una ventana emergente para imprimir
+- Eso degrada la experiencia en algunos navegadores o contextos embebidos
+
+Solución:
+- Reemplazar el flujo por impresión directa sobre una vista interna preparada para `window.print()`
+- Agregar feedback visual con un estado corto en el hero
+
+Estado:
+- Resuelto
+
 ## Verificaciones realizadas
 
 ### Local
@@ -249,6 +274,10 @@ Estado:
 - `GET /` autenticado entrega el dashboard actualizado
 - Producción verificada con título:
   - `Dashboard Reciclean | Febrero a mayo 2026`
+- Producción verificada con:
+  - tabs visibles
+  - exportes visibles
+  - flujo PDF corregido
 
 ## Variables de entorno
 - Requerida:

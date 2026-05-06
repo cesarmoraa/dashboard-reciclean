@@ -894,6 +894,10 @@ html = f"""<!DOCTYPE html>
       font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
     }}
 
+    body.printing-dashboard {{
+      background: #ffffff;
+    }}
+
     body::before,
     body::after {{
       content: "";
@@ -992,10 +996,11 @@ html = f"""<!DOCTYPE html>
     }}
 
     .hero-meta {{
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, max-content));
       gap: 10px;
       margin-top: 18px;
+      align-items: start;
     }}
 
     .chip {{
@@ -1518,9 +1523,28 @@ html = f"""<!DOCTYPE html>
     }}
 
     .button-row {{
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 10px;
+    }}
+
+    .action-status {{
+      min-height: 18px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }}
+
+    .action-status[data-tone="success"] {{
+      color: var(--green-800);
+    }}
+
+    .action-status[data-tone="info"] {{
+      color: var(--green-900);
+    }}
+
+    .action-status[data-tone="error"] {{
+      color: var(--danger);
     }}
 
     .results-meta {{
@@ -1655,17 +1679,16 @@ html = f"""<!DOCTYPE html>
     }}
 
     .tab-bar {{
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
       margin: 18px 0 22px;
       padding: 10px;
-      border-radius: 999px;
+      border-radius: 24px;
       background: rgba(255,255,255,0.72);
       border: 1px solid rgba(40, 68, 53, 0.08);
       box-shadow: var(--shadow-soft);
-      width: fit-content;
-      max-width: 100%;
+      width: 100%;
     }}
 
     .tab-button {{
@@ -1680,6 +1703,7 @@ html = f"""<!DOCTYPE html>
       letter-spacing: 0.01em;
       cursor: pointer;
       transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+      text-align: center;
     }}
 
     .tab-button:hover {{
@@ -1700,6 +1724,42 @@ html = f"""<!DOCTYPE html>
 
     .tab-pane.is-active {{
       display: block;
+    }}
+
+    #print-root {{
+      display: none;
+    }}
+
+    @media print {{
+      body.printing-dashboard {{
+        background: #ffffff !important;
+      }}
+
+      body.printing-dashboard > *:not(#print-root) {{
+        display: none !important;
+      }}
+
+      body.printing-dashboard #print-root {{
+        display: block !important;
+      }}
+
+      body.printing-dashboard #print-root .page {{
+        max-width: none;
+        padding: 0;
+      }}
+
+      body.printing-dashboard #print-root .ghost-button,
+      body.printing-dashboard #print-root .tab-bar {{
+        display: none !important;
+      }}
+
+      body.printing-dashboard #print-root .tab-pane {{
+        display: none !important;
+      }}
+
+      body.printing-dashboard #print-root .tab-pane.is-active {{
+        display: block !important;
+      }}
     }}
 
     .history-toolbar {{
@@ -1883,6 +1943,7 @@ html = f"""<!DOCTYPE html>
 
       .tab-bar {{
         width: 100%;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         border-radius: 22px;
       }}
 
@@ -1970,6 +2031,10 @@ html = f"""<!DOCTYPE html>
       .auth-actions {{
         flex-direction: column;
         align-items: stretch;
+      }}
+
+      .button-row {{
+        grid-template-columns: 1fr;
       }}
 
       .ghost-button {{
@@ -2210,6 +2275,7 @@ html = f"""<!DOCTYPE html>
               <button type="button" class="ghost-button" id="export-excel-button">Exportar Excel</button>
               <button type="button" class="ghost-button" id="logout-button">Cerrar sesión</button>
             </div>
+            <div class="action-status" id="action-status" data-tone="default"></div>
           </div>
         </div>
         <div class="aside-card">
@@ -2248,6 +2314,8 @@ html = f"""<!DOCTYPE html>
       <button type="button" class="tab-button" data-tab-target="riesgos">Riesgos e Inconsistencias</button>
       <button type="button" class="tab-button" data-tab-target="calidad">Calidad y Brechas</button>
     </nav>
+
+    <div id="print-root" aria-hidden="true"></div>
 
     <section class="tab-pane is-active" data-tab-pane="resumen">
     <section class="kpi-grid" id="kpi-grid"></section>
@@ -3421,6 +3489,13 @@ html = f"""<!DOCTYPE html>
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     }}
 
+    function setActionStatus(message, tone = 'default') {{
+      const node = document.getElementById('action-status');
+      if (!node) return;
+      node.textContent = message;
+      node.dataset.tone = tone;
+    }}
+
     function exportExcel() {{
       const rows = getFilteredRows();
       if (!rows.length) {{
@@ -3475,16 +3550,10 @@ html = f"""<!DOCTYPE html>
         workbook,
         'application/vnd.ms-excel;charset=utf-8'
       );
+      setActionStatus('Excel generado con el detalle filtrado.', 'success');
     }}
 
     function exportPdf() {{
-      const reportWindow = window.open('', '_blank', 'noopener,noreferrer,width=1280,height=920');
-      if (!reportWindow) {{
-        window.alert('No fue posible abrir la vista de impresión. Revisa si el navegador está bloqueando ventanas emergentes.');
-        return;
-      }}
-
-      const styles = Array.from(document.querySelectorAll('style')).map(node => node.textContent).join('\\n');
       const heroMarkup = document.querySelector('.hero').outerHTML;
       const activePaneMarkup = document.querySelector(`.tab-pane[data-tab-pane="${{activeTab}}"]`).outerHTML;
       const detailFilterTags = currentDetailFilters().map(item => `<span class="tag">${{escapeHtml(item)}}</span>`).join('');
@@ -3500,40 +3569,29 @@ html = f"""<!DOCTYPE html>
         </div>
       `;
 
-      reportWindow.document.open();
-      reportWindow.document.write(`
-        <!DOCTYPE html>
-        <html lang="es">
-          <head>
-            <meta charset="UTF-8" />
-            <title>Reporte Reciclean | ${{escapeHtml(activeTabLabel())}}</title>
-            <style>
-              ${{styles}}
-              body {{ background: #fff; }}
-              .ghost-button, .tab-bar {{ display: none !important; }}
-              .tab-pane {{ display: none !important; }}
-              .tab-pane[data-tab-pane="${{activeTab}}"] {{ display: block !important; }}
-              @media print {{
-                body {{ background: #fff !important; }}
-                .page {{ max-width: none; padding: 0; }}
-              }}
-            </style>
-          </head>
-          <body>
-            <main class="page">
-              ${{heroMarkup}}
-              ${{filterSummary}}
-              ${{activePaneMarkup}}
-            </main>
-            <script>
-              window.onload = () => {{
-                window.print();
-              }};
-            </script>
-          </body>
-        </html>
-      `);
-      reportWindow.document.close();
+      const printRoot = document.getElementById('print-root');
+      printRoot.innerHTML = `
+        <main class="page">
+          ${{heroMarkup}}
+          ${{filterSummary}}
+          <section class="tab-pane is-active" data-tab-pane="${{activeTab}}">
+            ${{activePaneMarkup}}
+          </section>
+        </main>
+      `;
+
+      const cleanup = () => {{
+        document.body.classList.remove('printing-dashboard');
+        printRoot.innerHTML = '';
+        window.removeEventListener('afterprint', cleanup);
+      }};
+
+      window.addEventListener('afterprint', cleanup);
+      document.body.classList.add('printing-dashboard');
+      setActionStatus('Abriendo impresión para guardar PDF.', 'info');
+      window.setTimeout(() => {{
+        window.print();
+      }}, 50);
     }}
 
     function initDashboard() {{
@@ -3564,6 +3622,7 @@ html = f"""<!DOCTYPE html>
       button.disabled = true;
       const originalText = button.textContent;
       button.textContent = 'Cerrando...';
+      setActionStatus('Cerrando sesión...', 'info');
       try {{
         await fetch('/api/logout', {{
           method: 'POST',

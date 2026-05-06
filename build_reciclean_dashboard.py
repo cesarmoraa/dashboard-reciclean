@@ -159,21 +159,22 @@ available_periods = sorted(period_counts.index.tolist())
 dashboard_periods = available_periods[-4:] if len(available_periods) >= 4 else available_periods
 default_period = dashboard_periods[-1]
 dashboard_period_label = period_window_label(dashboard_periods)
-window_df = df[df["FECHA_DT"].dt.to_period("M").isin(dashboard_periods)].copy()
+full_df = df.copy()
+full_df["periodKey"] = full_df["FECHA_DT"].dt.to_period("M").map(period_key)
+full_df["amount"] = parse_amount(full_df["TOTAL VALE"])
+full_df["weight"] = parse_weight(full_df["PESO FINAL"])
+full_df["ticket"] = full_df["amount"]
+full_df["branch"] = full_df["SUCURSAL"].map(normalize_title)
+full_df["service"] = full_df["TIPO SERVICIO"].map(normalize_title)
+full_df["transport"] = full_df["TIPO TRANSPORTE"].map(normalize_title)
+full_df["client"] = full_df["RAZÓN SOCIAL"].map(normalize_text)
+full_df["material"] = full_df["DESC PRODUCTO"].map(normalize_text)
+full_df["city"] = full_df["CIUDAD"].map(normalize_title)
+full_df["receptionDispatch"] = full_df["RECEPCIÓN DESPACHO"].map(normalize_title)
+full_df["originDestination"] = full_df["ORIGEN DESTINO"].map(normalize_text)
+full_df["serviceA"] = full_df["SERVICIO A"].map(normalize_text)
 
-window_df["periodKey"] = window_df["FECHA_DT"].dt.to_period("M").map(period_key)
-window_df["amount"] = parse_amount(window_df["TOTAL VALE"])
-window_df["weight"] = parse_weight(window_df["PESO FINAL"])
-window_df["ticket"] = window_df["amount"]
-window_df["branch"] = window_df["SUCURSAL"].map(normalize_title)
-window_df["service"] = window_df["TIPO SERVICIO"].map(normalize_title)
-window_df["transport"] = window_df["TIPO TRANSPORTE"].map(normalize_title)
-window_df["client"] = window_df["RAZÓN SOCIAL"].map(normalize_text)
-window_df["material"] = window_df["DESC PRODUCTO"].map(normalize_text)
-window_df["city"] = window_df["CIUDAD"].map(normalize_title)
-window_df["receptionDispatch"] = window_df["RECEPCIÓN DESPACHO"].map(normalize_title)
-window_df["originDestination"] = window_df["ORIGEN DESTINO"].map(normalize_text)
-window_df["serviceA"] = window_df["SERVICIO A"].map(normalize_text)
+window_df = full_df[full_df["FECHA_DT"].dt.to_period("M").isin(dashboard_periods)].copy()
 
 quality_cols = {
     "Sucursal": "branch",
@@ -454,6 +455,303 @@ def build_view(frame: pd.DataFrame, branch_label: str, current_period_label: str
         "insights": insights,
     }
 
+
+def delta_percent(current: float, previous: float) -> float | None:
+    if previous == 0:
+        return None
+    return round(((current - previous) / previous) * 100, 1)
+
+
+def build_history_data(active_period: pd.Period) -> dict[str, object]:
+    periods_until = [period for period in dashboard_periods if period <= active_period]
+    monthly = []
+    for period in periods_until:
+        frame = window_df[window_df["periodKey"] == period_key(period)].copy()
+        monthly.append(
+            {
+                "key": period_key(period),
+                "label": month_label(period),
+                "records": int(len(frame)),
+                "amount": float(frame["amount"].sum()),
+                "weightKg": float(frame["weight"].sum(skipna=True)),
+            }
+        )
+
+    current_frame = full_df[full_df["periodKey"] == period_key(active_period)].copy()
+    previous_candidates = [period for period in available_periods if period < active_period]
+    previous_period = previous_candidates[-1] if previous_candidates else None
+    previous_frame = (
+        full_df[full_df["periodKey"] == period_key(previous_period)].copy()
+        if previous_period is not None
+        else full_df.iloc[0:0].copy()
+    )
+
+    idx = available_periods.index(active_period)
+    trailing_periods = available_periods[max(0, idx - 3):idx]
+    trailing_frame = (
+        full_df[full_df["FECHA_DT"].dt.to_period("M").isin(trailing_periods)].copy()
+        if trailing_periods
+        else full_df.iloc[0:0].copy()
+    )
+
+    current_clients = set(current_frame["client"].tolist())
+    inactive_rows = []
+    if not trailing_frame.empty:
+        grouped = trailing_frame.groupby("client").agg(
+            last_visit=("FECHA_DT", "max"),
+            amount=("amount", "sum"),
+            visits=("FOLIO", "count"),
+        ).reset_index()
+        grouped = grouped[~grouped["client"].isin(current_clients)]
+        grouped = grouped.sort_values(["amount", "last_visit"], ascending=[False, False]).head(12)
+        end_of_period = pd.Timestamp(active_period.end_time).normalize()
+        for _, row in grouped.iterrows():
+            inactive_rows.append(
+                {
+                    "client": row["client"],
+                    "lastVisit": row["last_visit"].strftime("%d/%m/%Y"),
+                    "daysInactive": int((end_of_period - row["last_visit"].normalize()).days),
+                    "amount": float(row["amount"]),
+                    "visits": int(row["visits"]),
+                }
+            )
+
+    current_amount = float(current_frame["amount"].sum())
+    current_weight = float(current_frame["weight"].sum(skipna=True))
+    current_records = int(len(current_frame))
+    previous_amount = float(previous_frame["amount"].sum()) if not previous_frame.empty else 0.0
+    previous_weight = float(previous_frame["weight"].sum(skipna=True)) if not previous_frame.empty else 0.0
+    previous_records = int(len(previous_frame)) if not previous_frame.empty else 0
+
+    return {
+        "activeLabel": month_label(active_period),
+        "previousLabel": month_label(previous_period) if previous_period is not None else "Sin base previa",
+        "monthly": monthly,
+        "deltas": {
+            "amountPct": delta_percent(current_amount, previous_amount),
+            "weightPct": delta_percent(current_weight, previous_weight),
+            "recordsPct": delta_percent(float(current_records), float(previous_records)),
+            "currentAmount": current_amount,
+            "currentWeightKg": current_weight,
+            "currentRecords": current_records,
+            "previousAmount": previous_amount,
+            "previousWeightKg": previous_weight,
+            "previousRecords": previous_records,
+        },
+        "inactiveClients": inactive_rows,
+    }
+
+
+def build_risk_data(active_period: pd.Period) -> dict[str, object]:
+    period_frame = full_df[full_df["periodKey"] == period_key(active_period)].copy()
+    baseline_frame = full_df[full_df["FECHA_DT"].dt.to_period("M") <= active_period].copy()
+
+    stock_entries: list[dict[str, object]] = []
+    for _, row in period_frame.iterrows():
+        materials = split_materials(row["DESC PRODUCTO"])
+        if pd.isna(row["weight"]):
+            continue
+        weight_share = float(row["weight"]) / len(materials)
+        for material in materials:
+            service = str(row["service"]).lower()
+            stock_entries.append(
+                {
+                    "material": material,
+                    "boughtKg": weight_share if service == "compra" else 0.0,
+                    "soldKg": weight_share if service == "venta" else 0.0,
+                    "amount": float(row["amount"]) / len(materials),
+                }
+            )
+
+    stock_rows = []
+    if stock_entries:
+        stock_df = pd.DataFrame(stock_entries)
+        stock_grouped = (
+            stock_df.groupby("material")
+            .agg(boughtKg=("boughtKg", "sum"), soldKg=("soldKg", "sum"), amount=("amount", "sum"))
+            .reset_index()
+        )
+        stock_grouped["netKg"] = stock_grouped["boughtKg"] - stock_grouped["soldKg"]
+        stock_grouped = stock_grouped.sort_values(["amount", "netKg"], ascending=[False, False]).head(12)
+        for _, row in stock_grouped.iterrows():
+            stock_rows.append(
+                {
+                    "material": row["material"],
+                    "boughtKg": float(row["boughtKg"]),
+                    "soldKg": float(row["soldKg"]),
+                    "netKg": float(row["netKg"]),
+                    "flag": bool(row["netKg"] < 0),
+                }
+            )
+
+    total_amount = float(period_frame["amount"].sum())
+    client_grouped = period_frame.groupby("client")["amount"].sum().sort_values(ascending=False)
+    top_client_name = client_grouped.index[0] if not client_grouped.empty else "Sin dato"
+    top_client_amount = float(client_grouped.iloc[0]) if not client_grouped.empty else 0.0
+
+    flat_period = build_flat_df(period_frame)
+    material_grouped = flat_period.groupby("material")["amount"].sum().sort_values(ascending=False) if not flat_period.empty else pd.Series(dtype=float)
+    top_material_name = material_grouped.index[0] if not material_grouped.empty else "Sin dato"
+    top_material_amount = float(material_grouped.iloc[0]) if not material_grouped.empty else 0.0
+
+    daily_grouped = period_frame.groupby("FECHA_DT")["amount"].sum().sort_values(ascending=False)
+    top_day_date = daily_grouped.index[0] if not daily_grouped.empty else None
+    top_day_amount = float(daily_grouped.iloc[0]) if not daily_grouped.empty else 0.0
+
+    def concentration_status(share: float) -> str:
+        if share > 50:
+            return "critical"
+        if share >= 30:
+            return "warning"
+        return "healthy"
+
+    concentration = [
+        {
+            "label": "Top 1 cliente",
+            "subject": top_client_name,
+            "share": round((top_client_amount / total_amount) * 100, 1) if total_amount else 0,
+            "detail": f"Si sale {top_client_name}, se expone ese porcentaje del monto del mes.",
+        },
+        {
+            "label": "Top 1 material",
+            "subject": top_material_name,
+            "share": round((top_material_amount / total_amount) * 100, 1) if total_amount else 0,
+            "detail": f"{top_material_name} concentra la mayor parte del valor valorizado identificado.",
+        },
+        {
+            "label": "Top 1 día",
+            "subject": short_date_label(top_day_date) if top_day_date is not None else "Sin dato",
+            "share": round((top_day_amount / total_amount) * 100, 1) if total_amount else 0,
+            "detail": f"El día más intenso del período concentra ese porcentaje del monto total.",
+        },
+    ]
+    for item in concentration:
+        item["status"] = concentration_status(item["share"])
+
+    client_baseline = baseline_frame.groupby("client").agg(
+        mean_amount=("amount", "mean"),
+        std_amount=("amount", "std"),
+        visits=("FOLIO", "count"),
+    )
+    material_baseline = baseline_frame.groupby("material").agg(
+        mean_weight=("weight", "mean"),
+        std_weight=("weight", "std"),
+        visits=("FOLIO", "count"),
+    )
+    day_client_counts = period_frame.groupby(["FECHA_DT", "client"]).size()
+    day_amount_counts = period_frame.groupby(["FECHA_DT", "amount"]).size()
+
+    outliers = []
+    for _, row in period_frame.sort_values(["amount", "FECHA_DT"], ascending=[False, False]).iterrows():
+        alerts = []
+        client_stats = client_baseline.loc[row["client"]] if row["client"] in client_baseline.index else None
+        if client_stats is not None and client_stats["visits"] > 3 and pd.notna(client_stats["std_amount"]) and float(client_stats["std_amount"]) > 0:
+            threshold = float(client_stats["mean_amount"]) + (3 * float(client_stats["std_amount"]))
+            if float(row["amount"]) > threshold:
+                alerts.append("Ticket sobre 3 desviaciones del promedio del cliente")
+
+        material_stats = material_baseline.loc[row["material"]] if row["material"] in material_baseline.index else None
+        if (
+            material_stats is not None
+            and material_stats["visits"] > 3
+            and pd.notna(row["weight"])
+            and pd.notna(material_stats["std_weight"])
+            and float(material_stats["std_weight"]) > 0
+        ):
+            weight_threshold = float(material_stats["mean_weight"]) + (3 * float(material_stats["std_weight"]))
+            if float(row["weight"]) > weight_threshold:
+                alerts.append("Peso sobre 3 desviaciones del promedio del material")
+
+        if int(day_client_counts.loc[(row["FECHA_DT"], row["client"])]) > 2:
+            alerts.append("Cliente con más de 2 visitas en el mismo día")
+
+        if int(day_amount_counts.loc[(row["FECHA_DT"], row["amount"])]) >= 3:
+            alerts.append("Monto exacto repetido 3+ veces el mismo día")
+
+        if alerts:
+            outliers.append(
+                {
+                    "folio": int(row["FOLIO"]),
+                    "date": row["FECHA_DT"].strftime("%d/%m/%Y"),
+                    "client": row["client"],
+                    "amount": float(row["amount"]),
+                    "service": row["service"],
+                    "alerts": alerts,
+                }
+            )
+
+    return {
+        "alertCount": len(outliers),
+        "stockRows": stock_rows,
+        "concentration": concentration,
+        "outliers": outliers[:20],
+    }
+
+
+def build_quality_tab_data(active_period: pd.Period) -> dict[str, object]:
+    period_frame = full_df[full_df["periodKey"] == period_key(active_period)].copy()
+    matrix_fields = [
+        ("originDestination", "Origen / destino"),
+        ("weight", "Peso final"),
+        ("material", "Material"),
+        ("transport", "Transporte"),
+        ("receptionDispatch", "Recepción / despacho"),
+    ]
+
+    branch_matrix = []
+    for branch, branch_frame in period_frame.groupby("branch"):
+        row = {"branch": branch, "records": int(len(branch_frame))}
+        completeness_values = []
+        for field_key, _ in matrix_fields:
+            if field_key == "weight":
+                missing = int(branch_frame[field_key].isna().sum())
+            else:
+                missing = int((branch_frame[field_key] == "Sin dato").sum())
+            completeness = round(100 - ((missing / len(branch_frame)) * 100), 1) if len(branch_frame) else 100.0
+            row[field_key] = completeness
+            completeness_values.append(completeness)
+        row["avgCompleteness"] = round(sum(completeness_values) / len(completeness_values), 1) if completeness_values else 100.0
+        branch_matrix.append(row)
+    branch_matrix = sorted(branch_matrix, key=lambda item: item["avgCompleteness"], reverse=True)
+
+    gaps = []
+    critical_fields = [
+        ("branch", "Sucursal"),
+        ("service", "Servicio"),
+        ("transport", "Transporte"),
+        ("material", "Material"),
+        ("weight", "Peso final"),
+        ("originDestination", "Origen / destino"),
+        ("receptionDispatch", "Recepción / despacho"),
+    ]
+    for _, row in period_frame.iterrows():
+        missing_fields = []
+        for field_key, label in critical_fields:
+            if field_key == "weight":
+                if pd.isna(row[field_key]):
+                    missing_fields.append(label)
+            elif row[field_key] == "Sin dato":
+                missing_fields.append(label)
+        if missing_fields:
+            gaps.append(
+                {
+                    "folio": int(row["FOLIO"]),
+                    "date": row["FECHA_DT"].strftime("%d/%m/%Y"),
+                    "client": row["client"],
+                    "branch": row["branch"],
+                    "service": row["service"],
+                    "amount": float(row["amount"]),
+                    "missingFields": missing_fields,
+                }
+            )
+    gaps = sorted(gaps, key=lambda item: item["amount"], reverse=True)[:20]
+
+    return {
+        "fields": [{"key": key, "label": label} for key, label in matrix_fields],
+        "branchMatrix": branch_matrix,
+        "gaps": gaps,
+    }
+
 lookup_sources = {
     "clients": sorted(window_df["client"].unique().tolist()),
     "branches": sorted(window_df["branch"].unique().tolist()),
@@ -517,6 +815,25 @@ data = {
     "periodOptions": period_option_items,
     "branchOptionsByPeriod": branch_options_by_period,
     "viewsByPeriod": views_by_period,
+    "historyRangeOptions": [
+        {"value": "1m", "label": "Mes actual", "months": 1},
+        {"value": "3m", "label": "Últimos 3 meses", "months": 3},
+        {"value": "6m", "label": "Últimos 6 meses", "months": 6},
+        {"value": "12m", "label": "Últimos 12 meses", "months": 12},
+        {"value": "ytd", "label": "Año completo", "months": 12},
+    ],
+    "historicalByPeriod": {
+        period_key(period): build_history_data(period)
+        for period in dashboard_periods
+    },
+    "riskByPeriod": {
+        period_key(period): build_risk_data(period)
+        for period in dashboard_periods
+    },
+    "qualityByPeriod": {
+        period_key(period): build_quality_tab_data(period)
+        for period in dashboard_periods
+    },
     "compact": {
         "lookups": lookup_sources,
         "rows": compact_rows,
@@ -1331,6 +1648,170 @@ html = f"""<!DOCTYPE html>
       border-radius: var(--radius-lg);
     }}
 
+    .tab-bar {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 18px 0 22px;
+      padding: 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.72);
+      border: 1px solid rgba(40, 68, 53, 0.08);
+      box-shadow: var(--shadow-soft);
+      width: fit-content;
+      max-width: 100%;
+    }}
+
+    .tab-button {{
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      padding: 12px 16px;
+      border-radius: 999px;
+      font: inherit;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+    }}
+
+    .tab-button:hover {{
+      background: rgba(47, 106, 70, 0.08);
+      color: var(--green-900);
+      transform: translateY(-1px);
+    }}
+
+    .tab-button.is-active {{
+      background: linear-gradient(135deg, var(--green-800), var(--green-600));
+      color: #fff;
+      box-shadow: var(--shadow-soft);
+    }}
+
+    .tab-pane {{
+      display: none;
+    }}
+
+    .tab-pane.is-active {{
+      display: block;
+    }}
+
+    .history-toolbar {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }}
+
+    .metric-strip {{
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }}
+
+    .metric-pill {{
+      padding: 16px;
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(40, 68, 53, 0.08);
+      background: linear-gradient(180deg, rgba(240, 246, 236, 0.84), rgba(255,255,255,0.96));
+      box-shadow: var(--shadow-soft);
+    }}
+
+    .metric-pill .label {{
+      color: var(--muted);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 800;
+    }}
+
+    .metric-pill .value {{
+      margin-top: 10px;
+      font-size: 1.7rem;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+    }}
+
+    .metric-pill .foot {{
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }}
+
+    .status-chip {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 800;
+      width: fit-content;
+    }}
+
+    .status-chip.critical {{
+      background: rgba(155, 70, 56, 0.12);
+      color: var(--danger);
+    }}
+
+    .status-chip.warning {{
+      background: rgba(169, 106, 36, 0.12);
+      color: var(--amber);
+    }}
+
+    .status-chip.healthy {{
+      background: rgba(47, 106, 70, 0.1);
+      color: var(--green-800);
+    }}
+
+    .simple-table {{
+      width: 100%;
+      border-collapse: collapse;
+    }}
+
+    .simple-table th,
+    .simple-table td {{
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(40, 68, 53, 0.08);
+      text-align: left;
+      vertical-align: top;
+      font-size: 0.9rem;
+    }}
+
+    .simple-table th {{
+      background: #f2f7ef;
+      color: var(--green-900);
+      font-size: 0.77rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }}
+
+    .tag-list {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }}
+
+    .tag {{
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 8px;
+      border-radius: 999px;
+      background: rgba(47, 106, 70, 0.08);
+      color: var(--green-800);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }}
+
+    .tag.alert {{
+      background: rgba(155, 70, 56, 0.12);
+      color: var(--danger);
+    }}
+
     .footnote {{
       margin-top: 12px;
       color: var(--muted);
@@ -1353,6 +1834,10 @@ html = f"""<!DOCTYPE html>
 
       .filters-grid {{
         grid-template-columns: repeat(3, minmax(0, 1fr));
+      }}
+
+      .metric-strip {{
+        grid-template-columns: 1fr;
       }}
     }}
 
@@ -1388,6 +1873,11 @@ html = f"""<!DOCTYPE html>
 
       .insights-grid {{
         grid-template-columns: repeat(2, minmax(0, 1fr));
+      }}
+
+      .tab-bar {{
+        width: 100%;
+        border-radius: 22px;
       }}
 
       .section-title {{
@@ -1603,6 +2093,11 @@ html = f"""<!DOCTYPE html>
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }}
 
+      .history-toolbar {{
+        flex-direction: column;
+        align-items: stretch;
+      }}
+
       .filters-card {{
         padding: 14px;
       }}
@@ -1641,7 +2136,8 @@ html = f"""<!DOCTYPE html>
       .hero-meta,
       .kpi-grid,
       .filters-grid,
-      .aside-kpis {{
+      .aside-kpis,
+      .metric-strip {{
         grid-template-columns: 1fr;
       }}
 
@@ -1736,6 +2232,14 @@ html = f"""<!DOCTYPE html>
       </aside>
     </section>
 
+    <nav class="tab-bar" aria-label="Secciones del dashboard">
+      <button type="button" class="tab-button is-active" data-tab-target="resumen">Resumen Ejecutivo</button>
+      <button type="button" class="tab-button" data-tab-target="historico">Histórico y Tendencias</button>
+      <button type="button" class="tab-button" data-tab-target="riesgos">Riesgos e Inconsistencias</button>
+      <button type="button" class="tab-button" data-tab-target="calidad">Calidad y Brechas</button>
+    </nav>
+
+    <section class="tab-pane is-active" data-tab-pane="resumen">
     <section class="kpi-grid" id="kpi-grid"></section>
 
     <div class="section-title">
@@ -1920,13 +2424,211 @@ html = f"""<!DOCTYPE html>
         <div id="mobile-cards" class="mobile-cards"></div>
       </div>
     </section>
+    </section>
+
+    <section class="tab-pane" data-tab-pane="historico">
+      <div class="section-title">
+        <div>
+          <h2>Histórico y Tendencias</h2>
+          <p>Comparativo mensual, evolución consolidada y lectura comercial del rango seleccionado.</p>
+        </div>
+        <div class="section-badge">Base actual: datos accesibles del Excel vigente</div>
+      </div>
+
+      <section class="filters-card">
+        <div class="history-toolbar">
+          <div>
+            <strong style="display:block; font-size:1rem;">Comparativo mensual</strong>
+            <span class="footnote" id="history-caption"></span>
+          </div>
+          <div class="field" style="min-width: 240px;">
+            <label for="history-range-select">Rango histórico</label>
+            <select id="history-range-select"></select>
+          </div>
+        </div>
+        <div class="metric-strip" id="history-delta-cards"></div>
+      </section>
+
+      <section class="panel-grid">
+        <article class="panel span-7">
+          <div class="panel-header">
+            <div>
+              <h3 class="panel-title">Evolución mensual de monto</h3>
+              <p class="panel-subtitle">Comportamiento del valor valorizado según el rango histórico activo.</p>
+            </div>
+          </div>
+          <div id="monthly-amount-chart" class="chart-shell"></div>
+        </article>
+
+        <article class="panel span-5">
+          <div class="panel-header">
+            <div>
+              <h3 class="panel-title">Resumen mensual</h3>
+              <p class="panel-subtitle">Monto, kilos y registros por mes dentro del rango comparado.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="simple-table">
+              <thead>
+                <tr>
+                  <th>Mes</th>
+                  <th>Monto</th>
+                  <th>Kilos</th>
+                  <th>Registros</th>
+                </tr>
+              </thead>
+              <tbody id="monthly-summary-body"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel span-12">
+          <div class="panel-header">
+            <div>
+              <h3 class="panel-title">Clientes inactivos 30+ días</h3>
+              <p class="panel-subtitle">Clientes visibles en meses previos que no aparecen en el mes seleccionado.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="simple-table">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Última visita</th>
+                  <th>Días sin venir</th>
+                  <th>Monto previo</th>
+                  <th>Visitas previas</th>
+                </tr>
+              </thead>
+              <tbody id="inactive-clients-body"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    </section>
+
+    <section class="tab-pane" data-tab-pane="riesgos">
+      <div class="section-title">
+        <div>
+          <h2>Riesgos e Inconsistencias</h2>
+          <p>Lectura de inventario derivado, concentración y alertas automáticas detectables desde la data actual.</p>
+        </div>
+        <div class="section-badge">Versión 1 sin modificar el Excel original</div>
+      </div>
+
+      <section class="filters-card">
+        <div class="metric-strip" id="risk-concentration-cards"></div>
+      </section>
+
+      <section class="panel-grid">
+        <article class="panel span-6">
+          <div class="panel-header">
+            <div>
+              <h3 class="panel-title">Inventario derivado por material</h3>
+              <p class="panel-subtitle">Suma peso en compras y resta peso en ventas para detectar stock teórico y descuadres.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="simple-table">
+              <thead>
+                <tr>
+                  <th>Material</th>
+                  <th>Comprado kg</th>
+                  <th>Vendido kg</th>
+                  <th>Stock teórico kg</th>
+                </tr>
+              </thead>
+              <tbody id="stock-table-body"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel span-6">
+          <div class="panel-header">
+            <div>
+              <h3 class="panel-title">Registros con alerta</h3>
+              <p class="panel-subtitle">Outliers V1 y patrones sospechosos detectados en el mes activo.</p>
+            </div>
+            <span class="panel-note" id="outlier-count-note"></span>
+          </div>
+          <div class="table-wrap">
+            <table class="simple-table">
+              <thead>
+                <tr>
+                  <th>Folio</th>
+                  <th>Fecha</th>
+                  <th>Cliente</th>
+                  <th>Monto</th>
+                  <th>Alertas</th>
+                </tr>
+              </thead>
+              <tbody id="outliers-table-body"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    </section>
+
+    <section class="tab-pane" data-tab-pane="calidad">
+      <div class="section-title">
+        <div>
+          <h2>Calidad y Brechas</h2>
+          <p>Completitud por sucursal y focos concretos a corregir esta semana, ordenados por impacto.</p>
+        </div>
+        <div class="section-badge">Priorización operativa sobre campos críticos</div>
+      </div>
+
+      <section class="panel-grid">
+        <article class="panel span-12">
+          <div class="panel-header">
+            <div>
+              <h3 class="panel-title">Calidad del dato por sucursal</h3>
+              <p class="panel-subtitle">Porcentaje de completitud de campos críticos para cada sucursal del período activo.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="simple-table">
+              <thead id="quality-branch-head"></thead>
+              <tbody id="quality-branch-body"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel span-12">
+          <div class="panel-header">
+            <div>
+              <h3 class="panel-title">Brechas a corregir esta semana</h3>
+              <p class="panel-subtitle">Top 20 registros con campos críticos vacíos, ordenados por monto descendente.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="simple-table">
+              <thead>
+                <tr>
+                  <th>Folio</th>
+                  <th>Fecha</th>
+                  <th>Cliente</th>
+                  <th>Sucursal</th>
+                  <th>Servicio</th>
+                  <th>Monto</th>
+                  <th>Campos faltantes</th>
+                </tr>
+              </thead>
+              <tbody id="gaps-table-body"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    </section>
   </main>
 
   <script>
     const DATA = {json.dumps(data, ensure_ascii=False)};
     const VIEWS = DATA.viewsByPeriod;
+    let activeTab = 'resumen';
     let activePeriod = DATA.defaultPeriod;
     let activeBranch = DATA.defaultBranch;
+    let activeHistoryRange = '3m';
     const TABLE_ROWS = DATA.compact.rows.map(row => {{
       const [periodKey, fecha, folio, cliente, sucursal, servicio, transporte, material, pesoKg, monto, ciudad, origenDestino] = row;
       const fechaDate = new Date(`${{fecha}}T00:00:00`);
@@ -1977,6 +2679,18 @@ html = f"""<!DOCTYPE html>
 
     function currentMeta() {{
       return currentView().meta;
+    }}
+
+    function currentHistory() {{
+      return DATA.historicalByPeriod[activePeriod] || DATA.historicalByPeriod[DATA.defaultPeriod];
+    }}
+
+    function currentRisk() {{
+      return DATA.riskByPeriod[activePeriod] || DATA.riskByPeriod[DATA.defaultPeriod];
+    }}
+
+    function currentQualityTab() {{
+      return DATA.qualityByPeriod[activePeriod] || DATA.qualityByPeriod[DATA.defaultPeriod];
     }}
 
     const kpiDefinitions = [
@@ -2219,6 +2933,168 @@ html = f"""<!DOCTYPE html>
       `).join('');
     }}
 
+    function historyRangeConfig() {{
+      return DATA.historyRangeOptions.find(item => item.value === activeHistoryRange) || DATA.historyRangeOptions[1];
+    }}
+
+    function filteredMonthlyHistory() {{
+      const monthly = currentHistory().monthly || [];
+      if (activeHistoryRange === 'ytd') {{
+        const activeYear = activePeriod.slice(0, 4);
+        return monthly.filter(item => item.key.startsWith(activeYear));
+      }}
+      const months = historyRangeConfig().months || monthly.length;
+      return monthly.slice(Math.max(0, monthly.length - months));
+    }}
+
+    function formatDelta(value) {{
+      if (value == null || Number.isNaN(value)) return 'Sin base';
+      const signal = value > 0 ? '+' : '';
+      return `${{signal}}${{new Intl.NumberFormat('es-CL', {{ minimumFractionDigits: 1, maximumFractionDigits: 1 }}).format(value)}}%`;
+    }}
+
+    function renderHistoricalTab() {{
+      const history = currentHistory();
+      const monthly = filteredMonthlyHistory();
+      document.getElementById('history-caption').textContent = `Corte activo: ${{history.activeLabel}} · comparación contra ${{history.previousLabel}}`;
+
+      const deltaCards = [
+        {{
+          label: 'Monto vs mes anterior',
+          value: formatDelta(history.deltas.amountPct),
+          foot: `Actual: CLP ${{formatCurrency(history.deltas.currentAmount)}} · previo: CLP ${{formatCurrency(history.deltas.previousAmount)}}`
+        }},
+        {{
+          label: 'Kilos vs mes anterior',
+          value: formatDelta(history.deltas.weightPct),
+          foot: `Actual: ${{formatWeight(history.deltas.currentWeightKg)}} · previo: ${{formatWeight(history.deltas.previousWeightKg)}}`
+        }},
+        {{
+          label: 'Registros vs mes anterior',
+          value: formatDelta(history.deltas.recordsPct),
+          foot: `Actual: ${{formatInteger(history.deltas.currentRecords)}} · previo: ${{formatInteger(history.deltas.previousRecords)}}`
+        }}
+      ];
+      document.getElementById('history-delta-cards').innerHTML = deltaCards.map(card => `
+        <article class="metric-pill">
+          <div class="label">${{card.label}}</div>
+          <div class="value">${{card.value}}</div>
+          <div class="foot">${{card.foot}}</div>
+        </article>
+      `).join('');
+
+      renderAreaChart(
+        'monthly-amount-chart',
+        monthly.map(item => ({{
+          label: item.label.replace(' 2026', '').replace(' 2025', ''),
+          date: item.key,
+          value: item.amount
+        }})),
+        value => {{
+          if (value >= 1_000_000) return `${{formatOneDecimal(value / 1_000_000)}}M`;
+          if (value >= 1_000) return `${{formatInteger(Math.round(value / 1_000))}}k`;
+          return formatInteger(Math.round(value));
+        }},
+        'Monto mensual en CLP'
+      );
+
+      document.getElementById('monthly-summary-body').innerHTML = monthly.map(item => `
+        <tr>
+          <td>${{item.label}}</td>
+          <td class="money">CLP ${{formatCurrency(item.amount)}}</td>
+          <td class="num">${{formatWeight(item.weightKg)}}</td>
+          <td class="num">${{formatInteger(item.records)}}</td>
+        </tr>
+      `).join('');
+
+      const inactiveRows = history.inactiveClients || [];
+      document.getElementById('inactive-clients-body').innerHTML = inactiveRows.length
+        ? inactiveRows.map(item => `
+          <tr>
+            <td>${{escapeHtml(item.client)}}</td>
+            <td>${{item.lastVisit}}</td>
+            <td class="num">${{formatInteger(item.daysInactive)}}</td>
+            <td class="money">CLP ${{formatCurrency(item.amount)}}</td>
+            <td class="num">${{formatInteger(item.visits)}}</td>
+          </tr>
+        `).join('')
+        : `<tr><td colspan="5"><div class="empty-state">No se detectan clientes inactivos dentro de la ventana comparada.</div></td></tr>`;
+    }}
+
+    function renderRiskTab() {{
+      const risk = currentRisk();
+      document.getElementById('risk-concentration-cards').innerHTML = risk.concentration.map(item => `
+        <article class="metric-pill">
+          <div class="label">${{item.label}}</div>
+          <div class="value">${{formatPercent(item.share)}}</div>
+          <div class="foot">${{escapeHtml(item.subject)}}</div>
+          <div class="status-chip ${{item.status}}">${{item.detail}}</div>
+        </article>
+      `).join('');
+
+      document.getElementById('stock-table-body').innerHTML = risk.stockRows.length
+        ? risk.stockRows.map(item => `
+          <tr>
+            <td>${{escapeHtml(item.material)}}</td>
+            <td class="num">${{formatWeight(item.boughtKg)}}</td>
+            <td class="num">${{formatWeight(item.soldKg)}}</td>
+            <td class="num">${{item.flag ? `<span class="tag alert">${{formatWeight(item.netKg)}}</span>` : formatWeight(item.netKg)}}</td>
+          </tr>
+        `).join('')
+        : `<tr><td colspan="4"><div class="empty-state">No hay suficiente dato de compra y venta con peso para calcular inventario derivado.</div></td></tr>`;
+
+      document.getElementById('outlier-count-note').textContent = `${{formatInteger(risk.alertCount)}} alertas`;
+      document.getElementById('outliers-table-body').innerHTML = risk.outliers.length
+        ? risk.outliers.map(item => `
+          <tr>
+            <td class="num">${{formatInteger(item.folio)}}</td>
+            <td>${{item.date}}</td>
+            <td>${{escapeHtml(item.client)}}</td>
+            <td class="money">CLP ${{formatCurrency(item.amount)}}</td>
+            <td><div class="tag-list">${{item.alerts.map(alert => `<span class="tag alert">${{escapeHtml(alert)}}</span>`).join('')}}</div></td>
+          </tr>
+        `).join('')
+        : `<tr><td colspan="5"><div class="empty-state">No se detectaron outliers con las reglas automáticas básicas para este período.</div></td></tr>`;
+    }}
+
+    function renderQualityTab() {{
+      const quality = currentQualityTab();
+      const head = document.getElementById('quality-branch-head');
+      head.innerHTML = `
+        <tr>
+          <th>Sucursal</th>
+          <th>Registros</th>
+          ${{quality.fields.map(field => `<th>${{field.label}}</th>`).join('')}}
+          <th>Promedio</th>
+        </tr>
+      `;
+
+      document.getElementById('quality-branch-body').innerHTML = quality.branchMatrix.length
+        ? quality.branchMatrix.map(row => `
+          <tr>
+            <td>${{escapeHtml(row.branch)}}</td>
+            <td class="num">${{formatInteger(row.records)}}</td>
+            ${{quality.fields.map(field => `<td class="num">${{formatPercent(row[field.key])}}</td>`).join('')}}
+            <td class="num">${{formatPercent(row.avgCompleteness)}}</td>
+          </tr>
+        `).join('')
+        : `<tr><td colspan="${{quality.fields.length + 3}}"><div class="empty-state">No hay información suficiente para construir la matriz de calidad.</div></td></tr>`;
+
+      document.getElementById('gaps-table-body').innerHTML = quality.gaps.length
+        ? quality.gaps.map(item => `
+          <tr>
+            <td class="num">${{formatInteger(item.folio)}}</td>
+            <td>${{item.date}}</td>
+            <td>${{escapeHtml(item.client)}}</td>
+            <td>${{escapeHtml(item.branch)}}</td>
+            <td>${{escapeHtml(item.service)}}</td>
+            <td class="money">CLP ${{formatCurrency(item.amount)}}</td>
+            <td><div class="tag-list">${{item.missingFields.map(field => `<span class="tag">${{escapeHtml(field)}}</span>`).join('')}}</div></td>
+          </tr>
+        `).join('')
+        : `<tr><td colspan="7"><div class="empty-state">No se detectan brechas críticas en el período activo.</div></td></tr>`;
+    }}
+
     function buildSelect(selectId, values, defaultLabel) {{
       const select = document.getElementById(selectId);
       select.innerHTML = [`<option value="">${{defaultLabel}}</option>`]
@@ -2398,6 +3274,25 @@ html = f"""<!DOCTYPE html>
       }}, 'Monto diario en CLP');
     }}
 
+    function applyActiveTab() {{
+      document.querySelectorAll('[data-tab-target]').forEach(button => {{
+        button.classList.toggle('is-active', button.dataset.tabTarget === activeTab);
+      }});
+      document.querySelectorAll('[data-tab-pane]').forEach(pane => {{
+        pane.classList.toggle('is-active', pane.dataset.tabPane === activeTab);
+      }});
+    }}
+
+    function initTabs() {{
+      document.querySelectorAll('[data-tab-target]').forEach(button => {{
+        button.addEventListener('click', () => {{
+          activeTab = button.dataset.tabTarget || 'resumen';
+          applyActiveTab();
+        }});
+      }});
+      applyActiveTab();
+    }}
+
     function initGlobalPeriodSelect() {{
       const select = document.getElementById('global-period-select');
       select.innerHTML = DATA.periodOptions
@@ -2408,6 +3303,18 @@ html = f"""<!DOCTYPE html>
         activePeriod = event.target.value || DATA.defaultPeriod;
         normalizeActiveBranch();
         rerenderDashboard();
+      }});
+    }}
+
+    function initHistoryRangeSelect() {{
+      const select = document.getElementById('history-range-select');
+      select.innerHTML = DATA.historyRangeOptions
+        .map(item => `<option value="${{escapeHtml(item.value)}}">${{escapeHtml(item.label)}}</option>`)
+        .join('');
+      select.value = activeHistoryRange;
+      select.addEventListener('change', event => {{
+        activeHistoryRange = event.target.value || '3m';
+        renderHistoricalTab();
       }});
     }}
 
@@ -2444,13 +3351,20 @@ html = f"""<!DOCTYPE html>
       renderQuality();
       renderInsights();
       refreshTableFilters();
+      renderHistoricalTab();
+      renderRiskTab();
+      renderQualityTab();
       document.getElementById('global-period-select').value = activePeriod;
       document.getElementById('global-branch-select').value = activeBranch;
+      document.getElementById('history-range-select').value = activeHistoryRange;
+      applyActiveTab();
     }}
 
     function initDashboard() {{
+      initTabs();
       initGlobalPeriodSelect();
       initGlobalBranchSelect();
+      initHistoryRangeSelect();
       initFilters();
       rerenderDashboard();
     }}

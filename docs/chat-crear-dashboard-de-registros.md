@@ -25,6 +25,7 @@ Publicar el dashboard de registros operacionales de Reciclean con acceso privado
 - El dashboard se sirve desde `/`, `/dashboard` y `/dashboard_reciclean_registros_mes_actual.html`, siempre protegidos.
 - La pantalla `/login` queda pública.
 - No se publican ni exponen los archivos Excel por rutas HTTP.
+- El generador toma siempre el archivo `vales_detallada_*.xlsx` más reciente y arma el dashboard con la ventana de los dos meses más recientes disponibles en ese archivo.
 
 ## Cómo funciona el acceso por password
 - La password se lee desde `ACCESS_PASSWORD`.
@@ -83,10 +84,19 @@ http://localhost:3000
 4. Subir cambios al repo GitHub.
 5. Render redeploya automáticamente si el servicio está conectado al repo.
 
+## Regla de actualización de datos
+- El dashboard no queda fijo a un solo mes.
+- En cada regeneración se busca el `vales_detallada_*.xlsx` más reciente de la carpeta.
+- Sobre ese archivo se detectan los períodos con datos válidos.
+- Se usan los dos meses más recientes disponibles.
+- Si el archivo solo trae un mes, se muestra solo ese mes.
+- Con el archivo actual más reciente, la ventana consolidada es `Abril y mayo 2026`.
+
 ## Errores encontrados
 - La carpeta actual no estaba dentro de un repositorio Git al inicio del trabajo.
 - El proyecto original era un HTML local abierto por `file://`, lo que no sirve para autenticación real.
 - Fue necesario introducir backend para validar password y mantener sesión por cookie.
+- El resumen original del dashboard estaba pensado para un solo mes, por lo que hubo que ajustar el generador para soportar una ventana de dos meses sin romper KPIs, series ni filtros.
 
 ## Aprendizajes reutilizables
 - No confiar en pruebas desde `file://` cuando hay autenticación.
@@ -102,9 +112,11 @@ http://localhost:3000
 - Logout: listo
 - Estructura para Render: lista
 - Repositorio Git local inicializado: listo
-- Remote GitHub configurado: no
+- Remote GitHub configurado: listo
+- Repositorio GitHub conectado: `https://github.com/cesarmoraa/dashboard-reciclean.git`
+- Deploy en Render operativo: `https://dashboard-reciclean.onrender.com/`
 - Verificación local en `http://127.0.0.1:3000`: realizada
-- Verificación de deploy en Render: pendiente, porque la carpeta actual no tiene remote GitHub ni está conectada a un servicio Render
+- Verificación de deploy en Render: realizada
 
 ## Verificación local realizada
 - `GET /` sin sesión redirige a `/login`

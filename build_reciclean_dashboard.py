@@ -78,6 +78,19 @@ def month_label(period: pd.Period) -> str:
     return f"{MONTHS_ES[period.month].capitalize()} {period.year}"
 
 
+def period_window_label(periods: list[pd.Period]) -> str:
+    if not periods:
+        return "Sin período"
+    if len(periods) == 1:
+        return month_label(periods[0])
+
+    first_period = periods[0]
+    last_period = periods[-1]
+    if first_period.year == last_period.year:
+        return f"{MONTHS_ES[first_period.month].capitalize()} y {MONTHS_ES[last_period.month]} {last_period.year}"
+    return f"{month_label(first_period)} - {month_label(last_period)}"
+
+
 def short_date_label(date_value: pd.Timestamp) -> str:
     return f"{date_value.day:02d} {SHORT_MONTHS_ES[date_value.month]}"
 
@@ -132,8 +145,10 @@ INPUT_FILE = resolve_input_file()
 df = pd.read_excel(INPUT_FILE)
 df["FECHA_DT"] = pd.to_datetime(df["FECHA"], dayfirst=True, errors="coerce")
 period_counts = df["FECHA_DT"].dt.to_period("M").value_counts()
-selected_period = period_counts.sort_index().index.max()
-month_df = df[df["FECHA_DT"].dt.to_period("M") == selected_period].copy()
+available_periods = sorted(period_counts.index.tolist())
+selected_periods = available_periods[-2:] if len(available_periods) >= 2 else available_periods
+selected_period_label = period_window_label(selected_periods)
+month_df = df[df["FECHA_DT"].dt.to_period("M").isin(selected_periods)].copy()
 
 month_df["amount"] = parse_amount(month_df["TOTAL VALE"])
 month_df["weight"] = parse_weight(month_df["PESO FINAL"])
@@ -286,12 +301,12 @@ def build_view(frame: pd.DataFrame, branch_label: str) -> dict[str, object]:
         )
 
     if branch_label == "Todas":
-        first_summary = f"{month_label(selected_period)} cerró con {total_records} registros, CLP {fmt_number(total_amount)} valorizados y {fmt_number(total_weight / 1000, 1)} toneladas con dato de peso."
+        first_summary = f"{selected_period_label} cerró con {total_records} registros, CLP {fmt_number(total_amount)} valorizados y {fmt_number(total_weight / 1000, 1)} toneladas con dato de peso."
         second_summary = f"{top_branch['branch']} concentró {top_share_text(top_branch['amount'], total_amount)} del monto del mes, mientras la operación diaria alcanzó su máximo el {peak_day['FECHA_DT'].day} de {MONTHS_ES[peak_day['FECHA_DT'].month]}."
         third_summary = f"{top_service['service']} explicó {top_share_text(top_service['amount'], total_amount)} del valor mensual y la integridad de datos muestra brechas en origen / destino ({str(quality_metrics[0]['missingRate']).replace('.', ',')}%) y peso final ({str(next(item['missingRate'] for item in quality_metrics if item['label'] == 'Peso final')).replace('.', ',')}%)."
         first_insight = f"{top_branch['branch']} lidera por valorización con {top_share_text(top_branch['amount'], total_amount)} del monto, mientras Talca sostiene el mayor flujo por cantidad de registros ({int(branch_stats.loc[branch_stats['branch'] == 'Talca', 'records'].iloc[0]) if (branch_stats['branch'] == 'Talca').any() else int(top_branch['records'])})."
     else:
-        first_summary = f"{branch_label} acumuló {total_records} registros, CLP {fmt_number(total_amount)} valorizados y {fmt_number(total_weight / 1000, 1)} toneladas con dato de peso en {month_label(selected_period)}."
+        first_summary = f"{branch_label} acumuló {total_records} registros, CLP {fmt_number(total_amount)} valorizados y {fmt_number(total_weight / 1000, 1)} toneladas con dato de peso en {selected_period_label}."
         second_summary = f"El mayor día por monto fue el {peak_day['FECHA_DT'].day} de {MONTHS_ES[peak_day['FECHA_DT'].month]} y el servicio dominante fue {top_service['service']} con {top_share_text(top_service['amount'], total_amount)} del total de la sucursal."
         third_summary = f"La calidad del dato en {branch_label} muestra mayor brecha en {quality_metrics[0]['label'].lower()} ({str(quality_metrics[0]['missingRate']).replace('.', ',')}%) y en peso final ({str(next(item['missingRate'] for item in quality_metrics if item['label'] == 'Peso final')).replace('.', ',')}%)."
         first_insight = f"{branch_label} registra {total_records} folios en el mes y concentra su valorización principalmente en {top_service['service']}, con ticket promedio de CLP {fmt_number(avg_ticket)}."
@@ -458,8 +473,8 @@ for _, row in month_df.sort_values(["FECHA_DT", "FOLIO"], ascending=[False, Fals
 data = {
     "meta": {
         "title": "Dashboard Ejecutivo de Registros Operacionales",
-        "subtitle": "Reciclean | valorización, materiales y desempeño operativo del mes en curso",
-        "monthLabel": month_label(selected_period),
+        "subtitle": "Reciclean | valorización, materiales y desempeño operativo consolidado de la ventana vigente",
+        "monthLabel": selected_period_label,
         "sourceFile": INPUT_FILE.name,
         "updatedAt": datetime.now().strftime("%d/%m/%Y %H:%M"),
     },

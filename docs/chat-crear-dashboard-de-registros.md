@@ -26,6 +26,8 @@ Publicar el dashboard de registros operacionales de Reciclean con acceso privado
 - La pantalla `/login` queda pública.
 - No se publican ni exponen los archivos Excel por rutas HTTP.
 - El generador toma siempre el archivo `vales_detallada_*.xlsx` más reciente y arma el dashboard con la ventana de los dos meses más recientes disponibles en ese archivo.
+- El dashboard evolucionó luego a una ventana seleccionable de `Febrero 2026` a `Mayo 2026`, manteniendo lectura del archivo `vales_detallada_*.xlsx` más reciente.
+- Se agregaron tabs analíticas sobre el dashboard original y exportes V1 desde la interfaz autenticada.
 
 ## Cómo funciona el acceso por password
 - La password se lee desde `ACCESS_PASSWORD`.
@@ -88,15 +90,28 @@ http://localhost:3000
 - El dashboard no queda fijo a un solo mes.
 - En cada regeneración se busca el `vales_detallada_*.xlsx` más reciente de la carpeta.
 - Sobre ese archivo se detectan los períodos con datos válidos.
-- Se usan los dos meses más recientes disponibles.
+- Se usan los períodos válidos más recientes según la configuración activa del generador.
 - Si el archivo solo trae un mes, se muestra solo ese mes.
-- Con el archivo actual más reciente, la ventana consolidada es `Abril y mayo 2026`.
+- Con el archivo actual más reciente, la ventana consolidada quedó en `Febrero a mayo 2026`.
+
+## Mejoras posteriores relevantes
+- Selector global de período en el hero.
+- Selector global de sucursal en el hero.
+- Tabs:
+  - `Resumen Ejecutivo`
+  - `Histórico y Tendencias`
+  - `Riesgos e Inconsistencias`
+  - `Calidad y Brechas`
+- Filtro `Sucursal` del detalle desacoplado de la vista global.
+- `Exportar Excel` del detalle filtrado.
+- `Exportar PDF` del tab activo con filtros visibles.
 
 ## Errores encontrados
 - La carpeta actual no estaba dentro de un repositorio Git al inicio del trabajo.
 - El proyecto original era un HTML local abierto por `file://`, lo que no sirve para autenticación real.
 - Fue necesario introducir backend para validar password y mantener sesión por cookie.
 - El resumen original del dashboard estaba pensado para un solo mes, por lo que hubo que ajustar el generador para soportar una ventana de dos meses sin romper KPIs, series ni filtros.
+- El exporte PDF requirió una solución basada en vista imprimible del tab activo, para no introducir librerías pesadas innecesarias en esta etapa.
 
 ## Aprendizajes reutilizables
 - No confiar en pruebas desde `file://` cuando hay autenticación.

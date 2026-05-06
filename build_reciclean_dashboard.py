@@ -1517,6 +1517,12 @@ html = f"""<!DOCTYPE html>
       transform: none;
     }}
 
+    .button-row {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }}
+
     .results-meta {{
       display: flex;
       align-items: center;
@@ -2199,7 +2205,11 @@ html = f"""<!DOCTYPE html>
               <span class="auth-label">Acceso privado</span>
               <span class="auth-description">Sesión activa para visualización interna del dashboard.</span>
             </div>
-            <button type="button" class="ghost-button" id="logout-button">Cerrar sesión</button>
+            <div class="button-row">
+              <button type="button" class="ghost-button" id="export-pdf-button">Exportar PDF</button>
+              <button type="button" class="ghost-button" id="export-excel-button">Exportar Excel</button>
+              <button type="button" class="ghost-button" id="logout-button">Cerrar sesión</button>
+            </div>
           </div>
         </div>
         <div class="aside-card">
@@ -3163,13 +3173,7 @@ html = f"""<!DOCTYPE html>
       renderTable();
     }}
 
-    function initFilters() {{
-      ['filter-search', 'filter-branch', 'filter-service', 'filter-client', 'filter-from', 'filter-to']
-        .forEach(id => document.getElementById(id).addEventListener('input', renderTable));
-    }}
-
-    // Filtros y render del detalle en tabla desktop y tarjetas móvil.
-    function renderTable() {{
+    function getFilteredRows() {{
       const query = document.getElementById('filter-search').value.trim().toLowerCase();
       const branch = document.getElementById('filter-branch').value;
       const service = document.getElementById('filter-service').value;
@@ -3177,7 +3181,7 @@ html = f"""<!DOCTYPE html>
       const from = document.getElementById('filter-from').value;
       const to = document.getElementById('filter-to').value;
 
-      const rows = getRowsForActivePeriod().filter(row => {{
+      return getRowsForActivePeriod().filter(row => {{
         const haystack = [
           row.fechaLabel,
           row.folio,
@@ -3197,6 +3201,16 @@ html = f"""<!DOCTYPE html>
           && (!from || row.fecha >= from)
           && (!to || row.fecha <= to);
       }});
+    }}
+
+    function initFilters() {{
+      ['filter-search', 'filter-branch', 'filter-service', 'filter-client', 'filter-from', 'filter-to']
+        .forEach(id => document.getElementById(id).addEventListener('input', renderTable));
+    }}
+
+    // Filtros y render del detalle en tabla desktop y tarjetas móvil.
+    function renderTable() {{
+      const rows = getFilteredRows();
 
       document.getElementById('results-count').textContent = `${{formatInteger(rows.length)}} registros visibles`;
       document.getElementById('results-amount').textContent = `Monto filtrado: CLP ${{formatCurrency(rows.reduce((sum, row) => sum + Number(row.monto || 0), 0))}}`;
@@ -3360,6 +3374,168 @@ html = f"""<!DOCTYPE html>
       applyActiveTab();
     }}
 
+    function activeTabLabel() {{
+      const button = document.querySelector(`[data-tab-target="${{activeTab}}"]`);
+      return button ? button.textContent.trim() : 'Resumen Ejecutivo';
+    }}
+
+    function activePeriodLabel() {{
+      const option = DATA.periodOptions.find(item => item.value === activePeriod);
+      return option ? option.label : activePeriod;
+    }}
+
+    function slugify(value) {{
+      return String(value || '')
+        .normalize('NFD')
+        .replace(/[\\u0300-\\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase();
+    }}
+
+    function currentDetailFilters() {{
+      const query = document.getElementById('filter-search').value.trim();
+      const branch = document.getElementById('filter-branch').value || 'Todas las sucursales';
+      const service = document.getElementById('filter-service').value || 'Todos los servicios';
+      const client = document.getElementById('filter-client').value || 'Todos los clientes';
+      const from = document.getElementById('filter-from').value || 'Sin límite';
+      const to = document.getElementById('filter-to').value || 'Sin límite';
+      return [
+        `Búsqueda: ${{query || 'Sin texto'}}`,
+        `Sucursal detalle: ${{branch}}`,
+        `Servicio: ${{service}}`,
+        `Cliente: ${{client}}`,
+        `Desde: ${{from}}`,
+        `Hasta: ${{to}}`
+      ];
+    }}
+
+    function triggerDownload(fileName, blob, mimeType) {{
+      const url = URL.createObjectURL(new Blob([blob], {{ type: mimeType }}));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }}
+
+    function exportExcel() {{
+      const rows = getFilteredRows();
+      if (!rows.length) {{
+        window.alert('No hay registros filtrados para exportar.');
+        return;
+      }}
+
+      const headers = ['Fecha', 'Folio', 'Cliente', 'Sucursal', 'Servicio', 'Transporte', 'Material', 'Peso final kg', 'Monto CLP', 'Ciudad'];
+      const body = rows.map(row => [
+        row.fechaLabel,
+        row.folio,
+        row.cliente,
+        row.sucursal,
+        row.servicio,
+        row.transporte,
+        row.material,
+        row.pesoKg == null ? 'Sin dato' : Math.round(Number(row.pesoKg)),
+        Math.round(Number(row.monto || 0)),
+        row.ciudad
+      ]);
+
+      const tableMarkup = `
+        <table>
+          <thead><tr>${{headers.map(header => `<th>${{escapeHtml(header)}}</th>`).join('')}}</tr></thead>
+          <tbody>
+            ${{body.map(cells => `<tr>${{cells.map(cell => `<td>${{escapeHtml(cell)}}</td>`).join('')}}</tr>`).join('')}}
+          </tbody>
+        </table>
+      `;
+
+      const workbook = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+          <head>
+            <meta charset="UTF-8">
+            <style>
+              table {{ border-collapse: collapse; }}
+              th, td {{ border: 1px solid #c5d2c5; padding: 6px 8px; font-family: Arial, sans-serif; font-size: 12px; }}
+              th {{ background: #eef4ec; font-weight: 700; }}
+            </style>
+          </head>
+          <body>
+            <h2>Detalle operativo exportado</h2>
+            <p>Período: ${{escapeHtml(activePeriodLabel())}} | Vista sucursal: ${{escapeHtml(activeBranch)}} | Tab: ${{escapeHtml(activeTabLabel())}}</p>
+            <p>${{currentDetailFilters().map(item => escapeHtml(item)).join(' | ')}}</p>
+            ${{tableMarkup}}
+          </body>
+        </html>
+      `;
+
+      triggerDownload(
+        `reciclean-detalle-${{slugify(activePeriodLabel())}}-${{slugify(activeBranch)}}.xls`,
+        workbook,
+        'application/vnd.ms-excel;charset=utf-8'
+      );
+    }}
+
+    function exportPdf() {{
+      const reportWindow = window.open('', '_blank', 'noopener,noreferrer,width=1280,height=920');
+      if (!reportWindow) {{
+        window.alert('No fue posible abrir la vista de impresión. Revisa si el navegador está bloqueando ventanas emergentes.');
+        return;
+      }}
+
+      const styles = Array.from(document.querySelectorAll('style')).map(node => node.textContent).join('\\n');
+      const heroMarkup = document.querySelector('.hero').outerHTML;
+      const activePaneMarkup = document.querySelector(`.tab-pane[data-tab-pane="${{activeTab}}"]`).outerHTML;
+      const detailFilterTags = currentDetailFilters().map(item => `<span class="tag">${{escapeHtml(item)}}</span>`).join('');
+      const filterSummary = `
+        <div class="aside-card" style="margin: 18px 0 22px;">
+          <strong>Filtros activos</strong>
+          <div class="tag-list">
+            <span class="tag">Período: ${{escapeHtml(activePeriodLabel())}}</span>
+            <span class="tag">Vista sucursal: ${{escapeHtml(activeBranch)}}</span>
+            <span class="tag">Tab: ${{escapeHtml(activeTabLabel())}}</span>
+            ${{detailFilterTags}}
+          </div>
+        </div>
+      `;
+
+      reportWindow.document.open();
+      reportWindow.document.write(`
+        <!DOCTYPE html>
+        <html lang="es">
+          <head>
+            <meta charset="UTF-8" />
+            <title>Reporte Reciclean | ${{escapeHtml(activeTabLabel())}}</title>
+            <style>
+              ${{styles}}
+              body {{ background: #fff; }}
+              .ghost-button, .tab-bar {{ display: none !important; }}
+              .tab-pane {{ display: none !important; }}
+              .tab-pane[data-tab-pane="${{activeTab}}"] {{ display: block !important; }}
+              @media print {{
+                body {{ background: #fff !important; }}
+                .page {{ max-width: none; padding: 0; }}
+              }}
+            </style>
+          </head>
+          <body>
+            <main class="page">
+              ${{heroMarkup}}
+              ${{filterSummary}}
+              ${{activePaneMarkup}}
+            </main>
+            <script>
+              window.onload = () => {{
+                window.print();
+              }};
+            </script>
+          </body>
+        </html>
+      `);
+      reportWindow.document.close();
+    }}
+
     function initDashboard() {{
       initTabs();
       initGlobalPeriodSelect();
@@ -3401,6 +3577,8 @@ html = f"""<!DOCTYPE html>
     }}
 
     document.getElementById('logout-button').addEventListener('click', handleLogout);
+    document.getElementById('export-excel-button').addEventListener('click', exportExcel);
+    document.getElementById('export-pdf-button').addEventListener('click', exportPdf);
     verifySession().then(initDashboard);
     window.addEventListener('resize', debounce(renderResponsiveCharts, 120));
 

@@ -28,7 +28,7 @@ Sirve para retomar trabajo sin perder contexto técnico, funcional ni operativo.
 - Logout: sí
 - Deploy GitHub: operativo
 - Deploy Render: operativo y verificado
-- Nueva versión en trabajo local: tabs analíticas sobre el dashboard existente
+- Nueva versión en trabajo local: tabs analíticas y exportes sobre el dashboard existente
 
 ## Regla vigente de datos
 - El generador usa siempre el archivo más reciente `vales_detallada_*.xlsx`
@@ -98,7 +98,26 @@ Sirve para retomar trabajo sin perder contexto técnico, funcional ni operativo.
 - Estado de esta parte:
   - generado en `build_reciclean_dashboard.py`
   - regenerado en `dashboard_reciclean_registros_mes_actual.html`
-  - aún no commit/push al momento de esta actualización de bitácora
+  - publicado y verificado en Render
+
+### 6. Exportes V1
+- Se agregaron dos acciones nuevas en el hero autenticado:
+  - `Exportar Excel`
+  - `Exportar PDF`
+- `Exportar Excel` descarga el detalle operativo filtrado en formato `.xls`
+- `Exportar PDF` abre una vista imprimible del tab activo con:
+  - hero
+  - filtros activos
+  - contenido de la pestaña visible
+- Ambos exportes arrastran:
+  - período activo
+  - vista sucursal
+  - filtros del bloque `Detalle operativo`
+- Estado:
+  - implementado en el generador
+  - HTML regenerado
+  - validado en local
+  - pendiente de commit/push/publicación al momento de esta actualización
 
 ## Historial cronológico resumido
 
@@ -126,11 +145,10 @@ Sirve para retomar trabajo sin perder contexto técnico, funcional ni operativo.
 - Se integró el selector superior en el hero
 
 ### Cambio local no publicado aún
-- Tabs nuevas sobre el dashboard actual
-- Histórico mensual con selector de rango
-- Riesgos con stock derivado y outliers V1
-- Calidad con matriz por sucursal y brechas priorizadas
-- Pendiente de revisión visual y luego commit/push si se aprueba
+- Exportes V1:
+  - Excel del detalle filtrado
+  - PDF imprimible del tab activo con filtros
+- Pendiente de commit/push si se aprueba
 
 ## Errores encontrados y solución
 
@@ -191,7 +209,21 @@ Solución aplicada:
 
 Estado:
 - Generado localmente
-- Pendiente de revisión visual final y publicación
+- Publicado
+
+### 6. Warning por cierre de script en la plantilla del PDF
+Problema:
+- El generador mostró un warning por `invalid escape sequence '\/'`
+
+Causa real:
+- La plantilla de `exportPdf()` estaba cerrando el tag `<script>` con `\<\/script>` dentro del string
+
+Solución:
+- Reemplazar el cierre por `</script>` dentro de la plantilla final
+- Regenerar el HTML y validar sintaxis del script embebido
+
+Estado:
+- Resuelto
 
 ## Verificaciones realizadas
 
@@ -206,6 +238,9 @@ Estado:
 - Filtro de sucursal del detalle independiente
 - Validación de sintaxis JS del HTML generado: OK
 - Validación estructural del HTML generado con tabs nuevas: OK
+- Exportar Excel V1: implementado
+- Exportar PDF V1: implementado
+- Filtros activos incluidos en exportes: OK
 
 ### Producción
 - `GET /health` responde `{"ok":true,"status":"ok"}`
@@ -229,6 +264,7 @@ Estado:
 ## Pendientes recomendados
 - Hacer una pasada visual final mobile sobre producción
 - Decidir si conviene agregar un selector global de tipo de servicio
+- Publicar la mejora de exportes V1 en GitHub/Render si se aprueba
 - Seguir actualizando esta bitácora después de cada cambio o publicación
 
 ## Regla de mantenimiento para futuras sesiones

@@ -84,7 +84,7 @@ http://localhost:3000
 5. Render redeploya automáticamente si el servicio está conectado al repo.
 
 ## Errores encontrados
-- La carpeta actual no está dentro de un repositorio Git.
+- La carpeta actual no estaba dentro de un repositorio Git al inicio del trabajo.
 - El proyecto original era un HTML local abierto por `file://`, lo que no sirve para autenticación real.
 - Fue necesario introducir backend para validar password y mantener sesión por cookie.
 
@@ -101,8 +101,10 @@ http://localhost:3000
 - Dashboard protegido: listo
 - Logout: listo
 - Estructura para Render: lista
+- Repositorio Git local inicializado: listo
+- Remote GitHub configurado: no
 - Verificación local en `http://127.0.0.1:3000`: realizada
-- Verificación de deploy en Render: pendiente, porque la carpeta actual no está conectada a un repo GitHub ni a un servicio Render
+- Verificación de deploy en Render: pendiente, porque la carpeta actual no tiene remote GitHub ni está conectada a un servicio Render
 
 ## Verificación local realizada
 - `GET /` sin sesión redirige a `/login`

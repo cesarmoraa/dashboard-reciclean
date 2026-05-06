@@ -1,0 +1,12 @@
+{
+  "name": "reciclean-dashboard-registros",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dashboard privado de registros operacionales Reciclean con acceso por password.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

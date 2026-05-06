@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Acceso privado | Reciclean</title>
+  <style>
+    :root {
+      --bg: #eef4ec;
+      --surface: rgba(255, 255, 255, 0.94);
+      --surface-strong: #ffffff;
+      --line: rgba(40, 68, 53, 0.12);
+      --line-strong: rgba(40, 68, 53, 0.22);
+      --text: #1f3428;
+      --muted: #687b6e;
+      --green-900: #214932;
+      --green-800: #2d6a45;
+      --green-700: #3f8654;
+      --green-400: #a9cbac;
+      --danger: #8b4336;
+      --info: #335d8a;
+      --shadow: 0 20px 56px rgba(31, 52, 40, 0.12);
+      --shadow-soft: 0 12px 24px rgba(31, 52, 40, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background:
+        radial-gradient(circle at top left, rgba(95, 163, 109, 0.22), transparent 26rem),
+        radial-gradient(circle at 100% 0%, rgba(33, 73, 50, 0.08), transparent 22rem),
+        linear-gradient(180deg, #edf3ec 0%, #f7faf6 38%, #eef4ec 100%);
+      color: var(--text);
+      font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    .shell {
+      width: min(1040px, 100%);
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
+      border-radius: 32px;
+      overflow: hidden;
+      border: 1px solid rgba(40, 68, 53, 0.08);
+      box-shadow: var(--shadow);
+      background: rgba(255, 255, 255, 0.72);
+      backdrop-filter: blur(14px);
+    }
+
+    .brand-panel,
+    .login-panel {
+      padding: 40px;
+    }
+
+    .brand-panel {
+      position: relative;
+      background:
+        linear-gradient(160deg, rgba(33, 73, 50, 0.96), rgba(47, 106, 70, 0.94)),
+        linear-gradient(180deg, rgba(169, 203, 172, 0.16), transparent);
+      color: #f4f8f2;
+      display: grid;
+      align-content: space-between;
+      gap: 28px;
+      min-height: 620px;
+      overflow: hidden;
+    }
+
+    .brand-panel::before,
+    .brand-panel::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    .brand-panel::before {
+      top: -110px;
+      right: -80px;
+      width: 260px;
+      height: 260px;
+      background: radial-gradient(circle, rgba(169, 203, 172, 0.26), transparent 70%);
+    }
+
+    .brand-panel::after {
+      bottom: -140px;
+      left: -80px;
+      width: 280px;
+      height: 280px;
+      background: radial-gradient(circle, rgba(255, 255, 255, 0.12), transparent 72%);
+    }
+
+    .brand-stack,
+    .brand-metrics {
+      position: relative;
+      z-index: 1;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 14px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #f4f8f2;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 22px 0 14px;
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      font-size: clamp(2.3rem, 4.2vw, 3.9rem);
+      line-height: 0.98;
+      letter-spacing: -0.05em;
+    }
+
+    .brand-copy {
+      max-width: 36rem;
+      margin: 0;
+      color: rgba(244, 248, 242, 0.84);
+      font-size: 1rem;
+      line-height: 1.72;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 26px;
+    }
+
+    .metric-card {
+      padding: 16px 16px 14px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .metric-card strong {
+      display: block;
+      font-size: 1.25rem;
+      letter-spacing: -0.04em;
+    }
+
+    .metric-card span {
+      display: block;
+      margin-top: 8px;
+      color: rgba(244, 248, 242, 0.8);
+      font-size: 0.86rem;
+      line-height: 1.45;
+    }
+
+    .brand-list {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .brand-list li {
+      position: relative;
+      padding-left: 18px;
+      color: rgba(244, 248, 242, 0.84);
+      line-height: 1.55;
+    }
+
+    .brand-list li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 10px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #d4e5d0, #a9cbac);
+      box-shadow: 0 0 0 4px rgba(169, 203, 172, 0.14);
+    }
+
+    .login-panel {
+      display: grid;
+      align-content: center;
+      gap: 20px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.97), rgba(247,250,246,0.94));
+    }
+
+    .login-card {
+      padding: 0;
+    }
+
+    .login-label {
+      color: var(--green-800);
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .login-title {
+      margin: 10px 0 8px;
+      font-size: clamp(1.8rem, 3vw, 2.4rem);
+      letter-spacing: -0.04em;
+      line-height: 1;
+    }
+
+    .login-copy {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.65;
+      font-size: 0.96rem;
+    }
+
+    .status {
+      min-height: 58px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: rgba(240, 246, 236, 0.86);
+      border: 1px solid rgba(40, 68, 53, 0.08);
+      color: var(--green-900);
+      font-size: 0.94rem;
+      line-height: 1.5;
+      display: grid;
+      align-items: center;
+    }
+
+    .status[data-tone="error"] {
+      background: rgba(139, 67, 54, 0.08);
+      border-color: rgba(139, 67, 54, 0.16);
+      color: var(--danger);
+    }
+
+    .status[data-tone="info"] {
+      background: rgba(51, 93, 138, 0.08);
+      border-color: rgba(51, 93, 138, 0.16);
+      color: var(--info);
+    }
+
+    .field {
+      display: grid;
+      gap: 10px;
+    }
+
+    label {
+      font-size: 0.8rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    input[type="password"] {
+      width: 100%;
+      padding: 15px 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(40, 68, 53, 0.14);
+      background: var(--surface-strong);
+      color: var(--text);
+      font: inherit;
+      outline: none;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+    }
+
+    input[type="password"]:focus {
+      border-color: rgba(63, 134, 84, 0.42);
+      box-shadow: 0 0 0 4px rgba(63, 134, 84, 0.12);
+    }
+
+    .submit {
+      appearance: none;
+      border: 0;
+      border-radius: 18px;
+      padding: 15px 18px;
+      background: linear-gradient(135deg, var(--green-800), var(--green-700));
+      color: #f7faf6;
+      font: inherit;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      box-shadow: 0 16px 28px rgba(45, 106, 69, 0.22);
+      transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
+    }
+
+    .submit:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 18px 32px rgba(45, 106, 69, 0.26);
+    }
+
+    .submit:disabled {
+      opacity: 0.72;
+      cursor: wait;
+      transform: none;
+      box-shadow: 0 14px 24px rgba(45, 106, 69, 0.18);
+    }
+
+    .helper {
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 980px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      .brand-panel {
+        min-height: auto;
+      }
+    }
+
+    @media (max-width: 640px) {
+      body {
+        padding: 14px;
+      }
+
+      .brand-panel,
+      .login-panel {
+        padding: 26px 22px;
+      }
+
+      .metric-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="brand-panel" aria-label="Contexto Reciclean">
+      <div class="brand-stack">
+        <span class="eyebrow">Reciclean · acceso interno</span>
+        <h1>Dashboard privado de registros operacionales</h1>
+        <p class="brand-copy">Acceso restringido a la visualización mensual de valorización, flujo operacional, materiales y trazabilidad comercial de Reciclean.</p>
+        <div class="metric-grid">
+          <article class="metric-card">
+            <strong>Economía circular</strong>
+            <span>Seguimiento ejecutivo de compra, retiro, recepción y valorización de materiales.</span>
+          </article>
+          <article class="metric-card">
+            <strong>Operación trazable</strong>
+            <span>Vista mensual preparada para operación, control comercial y revisión gerencial.</span>
+          </article>
+          <article class="metric-card">
+            <strong>Acceso restringido</strong>
+            <span>Ingreso privado mediante password única validada desde backend.</span>
+          </article>
+        </div>
+      </div>
+      <ul class="brand-list">
+        <li>Compra, retiro, recepción, certificación y gestión de materiales industriales.</li>
+        <li>Cartón, papel, plásticos, films, vidrio, metales y chatarra.</li>
+        <li>Operación vinculada a Santiago, Talca y control interno de desempeño mensual.</li>
+      </ul>
+    </section>
+
+    <section class="login-panel" aria-label="Ingreso privado">
+      <div class="login-card">
+        <div class="login-label">Acceso privado</div>
+        <h2 class="login-title">Ingresar</h2>
+        <p class="login-copy">Acceso restringido al dashboard ejecutivo y operativo de registros.</p>
+      </div>
+
+      <div class="status" id="status" data-tone="default">Acceso restringido.</div>
+
+      <form id="login-form" novalidate>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required />
+        </div>
+        <div style="height: 14px;"></div>
+        <button class="submit" type="submit" id="submit-button">Entrar</button>
+      </form>
+
+      <p class="helper">Uso interno autorizado. La validación se realiza desde servidor y mantiene sesión segura por cookie.</p>
+    </section>
+  </main>
+
+  <script>
+    const statusNode = document.getElementById('status');
+    const form = document.getElementById('login-form');
+    const passwordField = document.getElementById('password');
+    const submitButton = document.getElementById('submit-button');
+
+    function setStatus(message, tone = 'default') {
+      statusNode.textContent = message;
+      statusNode.dataset.tone = tone;
+    }
+
+    function statusFromQuery() {
+      const params = new URLSearchParams(window.location.search);
+      const reason = params.get('reason');
+      if (reason === 'expired') {
+        setStatus('La sesión expiró. Ingresa nuevamente.', 'info');
+        return;
+      }
+      if (reason === 'logout') {
+        setStatus('La sesión se cerró correctamente.', 'info');
+        return;
+      }
+      setStatus('Acceso restringido.', 'default');
+    }
+
+    async function checkExistingSession() {
+      try {
+        const response = await fetch('/api/session', {
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' }
+        });
+        if (response.ok) {
+          window.location.replace('/');
+        }
+      } catch (error) {
+        setStatus('No fue posible comprobar la sesión actual.', 'error');
+      }
+    }
+
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      setStatus('Validando acceso...', 'info');
+      submitButton.disabled = true;
+      submitButton.textContent = 'Validando...';
+
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ password: passwordField.value })
+        });
+
+        if (response.ok) {
+          window.location.replace('/');
+          return;
+        }
+
+        if (response.status === 401) {
+          setStatus('No fue posible validar el acceso.', 'error');
+        } else {
+          setStatus('Ocurrió un problema al validar el acceso.', 'error');
+        }
+      } catch (error) {
+        setStatus('Ocurrió un problema al validar el acceso.', 'error');
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Entrar';
+        passwordField.value = '';
+        passwordField.focus();
+      }
+    });
+
+    statusFromQuery();
+    checkExistingSession();
+    passwordField.focus();
+  </script>
+</body>
+</html>

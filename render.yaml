@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: reciclean-dashboard-registros
+    env: node
+    plan: starter
+    buildCommand: "npm install"
+    startCommand: "npm start"
+    envVars:
+      - key: ACCESS_PASSWORD
+        sync: false

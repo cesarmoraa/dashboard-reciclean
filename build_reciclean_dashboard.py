@@ -83,12 +83,22 @@ def period_window_label(periods: list[pd.Period]) -> str:
         return "Sin período"
     if len(periods) == 1:
         return month_label(periods[0])
+    if len(periods) > 2:
+        first_period = periods[0]
+        last_period = periods[-1]
+        if first_period.year == last_period.year:
+            return f"{MONTHS_ES[first_period.month].capitalize()} a {MONTHS_ES[last_period.month]} {last_period.year}"
+        return f"{month_label(first_period)} - {month_label(last_period)}"
 
     first_period = periods[0]
     last_period = periods[-1]
     if first_period.year == last_period.year:
         return f"{MONTHS_ES[first_period.month].capitalize()} y {MONTHS_ES[last_period.month]} {last_period.year}"
     return f"{month_label(first_period)} - {month_label(last_period)}"
+
+
+def period_key(period: pd.Period) -> str:
+    return str(period)
 
 
 def short_date_label(date_value: pd.Timestamp) -> str:
@@ -146,22 +156,24 @@ df = pd.read_excel(INPUT_FILE)
 df["FECHA_DT"] = pd.to_datetime(df["FECHA"], dayfirst=True, errors="coerce")
 period_counts = df["FECHA_DT"].dt.to_period("M").value_counts()
 available_periods = sorted(period_counts.index.tolist())
-selected_periods = available_periods[-2:] if len(available_periods) >= 2 else available_periods
-selected_period_label = period_window_label(selected_periods)
-month_df = df[df["FECHA_DT"].dt.to_period("M").isin(selected_periods)].copy()
+dashboard_periods = available_periods[-4:] if len(available_periods) >= 4 else available_periods
+default_period = dashboard_periods[-1]
+dashboard_period_label = period_window_label(dashboard_periods)
+window_df = df[df["FECHA_DT"].dt.to_period("M").isin(dashboard_periods)].copy()
 
-month_df["amount"] = parse_amount(month_df["TOTAL VALE"])
-month_df["weight"] = parse_weight(month_df["PESO FINAL"])
-month_df["ticket"] = month_df["amount"]
-month_df["branch"] = month_df["SUCURSAL"].map(normalize_title)
-month_df["service"] = month_df["TIPO SERVICIO"].map(normalize_title)
-month_df["transport"] = month_df["TIPO TRANSPORTE"].map(normalize_title)
-month_df["client"] = month_df["RAZÓN SOCIAL"].map(normalize_text)
-month_df["material"] = month_df["DESC PRODUCTO"].map(normalize_text)
-month_df["city"] = month_df["CIUDAD"].map(normalize_title)
-month_df["receptionDispatch"] = month_df["RECEPCIÓN DESPACHO"].map(normalize_title)
-month_df["originDestination"] = month_df["ORIGEN DESTINO"].map(normalize_text)
-month_df["serviceA"] = month_df["SERVICIO A"].map(normalize_text)
+window_df["periodKey"] = window_df["FECHA_DT"].dt.to_period("M").map(period_key)
+window_df["amount"] = parse_amount(window_df["TOTAL VALE"])
+window_df["weight"] = parse_weight(window_df["PESO FINAL"])
+window_df["ticket"] = window_df["amount"]
+window_df["branch"] = window_df["SUCURSAL"].map(normalize_title)
+window_df["service"] = window_df["TIPO SERVICIO"].map(normalize_title)
+window_df["transport"] = window_df["TIPO TRANSPORTE"].map(normalize_title)
+window_df["client"] = window_df["RAZÓN SOCIAL"].map(normalize_text)
+window_df["material"] = window_df["DESC PRODUCTO"].map(normalize_text)
+window_df["city"] = window_df["CIUDAD"].map(normalize_title)
+window_df["receptionDispatch"] = window_df["RECEPCIÓN DESPACHO"].map(normalize_title)
+window_df["originDestination"] = window_df["ORIGEN DESTINO"].map(normalize_text)
+window_df["serviceA"] = window_df["SERVICIO A"].map(normalize_text)
 
 quality_cols = {
     "Sucursal": "branch",
@@ -194,7 +206,7 @@ def build_flat_df(frame: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(flat_rows)
 
 
-def build_view(frame: pd.DataFrame, branch_label: str) -> dict[str, object]:
+def build_view(frame: pd.DataFrame, branch_label: str, current_period_label: str) -> dict[str, object]:
     total_records = int(len(frame))
     total_amount = float(frame["amount"].sum())
     total_weight = float(frame["weight"].sum(skipna=True))
@@ -301,12 +313,12 @@ def build_view(frame: pd.DataFrame, branch_label: str) -> dict[str, object]:
         )
 
     if branch_label == "Todas":
-        first_summary = f"{selected_period_label} cerró con {total_records} registros, CLP {fmt_number(total_amount)} valorizados y {fmt_number(total_weight / 1000, 1)} toneladas con dato de peso."
+        first_summary = f"{current_period_label} cerró con {total_records} registros, CLP {fmt_number(total_amount)} valorizados y {fmt_number(total_weight / 1000, 1)} toneladas con dato de peso."
         second_summary = f"{top_branch['branch']} concentró {top_share_text(top_branch['amount'], total_amount)} del monto del mes, mientras la operación diaria alcanzó su máximo el {peak_day['FECHA_DT'].day} de {MONTHS_ES[peak_day['FECHA_DT'].month]}."
         third_summary = f"{top_service['service']} explicó {top_share_text(top_service['amount'], total_amount)} del valor mensual y la integridad de datos muestra brechas en origen / destino ({str(quality_metrics[0]['missingRate']).replace('.', ',')}%) y peso final ({str(next(item['missingRate'] for item in quality_metrics if item['label'] == 'Peso final')).replace('.', ',')}%)."
         first_insight = f"{top_branch['branch']} lidera por valorización con {top_share_text(top_branch['amount'], total_amount)} del monto, mientras Talca sostiene el mayor flujo por cantidad de registros ({int(branch_stats.loc[branch_stats['branch'] == 'Talca', 'records'].iloc[0]) if (branch_stats['branch'] == 'Talca').any() else int(top_branch['records'])})."
     else:
-        first_summary = f"{branch_label} acumuló {total_records} registros, CLP {fmt_number(total_amount)} valorizados y {fmt_number(total_weight / 1000, 1)} toneladas con dato de peso en {selected_period_label}."
+        first_summary = f"{branch_label} acumuló {total_records} registros, CLP {fmt_number(total_amount)} valorizados y {fmt_number(total_weight / 1000, 1)} toneladas con dato de peso en {current_period_label}."
         second_summary = f"El mayor día por monto fue el {peak_day['FECHA_DT'].day} de {MONTHS_ES[peak_day['FECHA_DT'].month]} y el servicio dominante fue {top_service['service']} con {top_share_text(top_service['amount'], total_amount)} del total de la sucursal."
         third_summary = f"La calidad del dato en {branch_label} muestra mayor brecha en {quality_metrics[0]['label'].lower()} ({str(quality_metrics[0]['missingRate']).replace('.', ',')}%) y en peso final ({str(next(item['missingRate'] for item in quality_metrics if item['label'] == 'Peso final')).replace('.', ',')}%)."
         first_insight = f"{branch_label} registra {total_records} folios en el mes y concentra su valorización principalmente en {top_service['service']}, con ticket promedio de CLP {fmt_number(avg_ticket)}."
@@ -443,19 +455,20 @@ def build_view(frame: pd.DataFrame, branch_label: str) -> dict[str, object]:
     }
 
 lookup_sources = {
-    "clients": sorted(month_df["client"].unique().tolist()),
-    "branches": sorted(month_df["branch"].unique().tolist()),
-    "services": sorted(month_df["service"].unique().tolist()),
-    "transports": sorted(month_df["transport"].unique().tolist()),
-    "materials": sorted(month_df["material"].unique().tolist()),
-    "cities": sorted(month_df["city"].unique().tolist()),
-    "origins": sorted(month_df["originDestination"].unique().tolist()),
+    "clients": sorted(window_df["client"].unique().tolist()),
+    "branches": sorted(window_df["branch"].unique().tolist()),
+    "services": sorted(window_df["service"].unique().tolist()),
+    "transports": sorted(window_df["transport"].unique().tolist()),
+    "materials": sorted(window_df["material"].unique().tolist()),
+    "cities": sorted(window_df["city"].unique().tolist()),
+    "origins": sorted(window_df["originDestination"].unique().tolist()),
 }
 lookup_index = {name: {value: idx for idx, value in enumerate(values)} for name, values in lookup_sources.items()}
 compact_rows = []
-for _, row in month_df.sort_values(["FECHA_DT", "FOLIO"], ascending=[False, False]).iterrows():
+for _, row in window_df.sort_values(["FECHA_DT", "FOLIO"], ascending=[False, False]).iterrows():
     compact_rows.append(
         [
+            row["periodKey"],
             row["FECHA_DT"].strftime("%Y-%m-%d"),
             int(row["FOLIO"]),
             lookup_index["clients"][row["client"]],
@@ -470,23 +483,40 @@ for _, row in month_df.sort_values(["FECHA_DT", "FOLIO"], ascending=[False, Fals
         ]
     )
 
+period_option_items = [
+    {"value": period_key(period), "label": month_label(period)}
+    for period in dashboard_periods
+]
+branch_options_by_period: dict[str, list[str]] = {}
+views_by_period: dict[str, dict[str, dict[str, object]]] = {}
+
+for period in dashboard_periods:
+    key = period_key(period)
+    period_label = month_label(period)
+    period_frame = window_df[window_df["periodKey"] == key].copy()
+    period_branches = sorted(period_frame["branch"].unique().tolist())
+    branch_options_by_period[key] = ["Todas"] + period_branches
+    views_by_period[key] = {
+        "Todas": build_view(period_frame, "Todas", period_label),
+        **{
+            branch: build_view(period_frame[period_frame["branch"] == branch].copy(), branch, period_label)
+            for branch in period_branches
+        },
+    }
+
 data = {
     "meta": {
         "title": "Dashboard Ejecutivo de Registros Operacionales",
-        "subtitle": "Reciclean | valorización, materiales y desempeño operativo consolidado de la ventana vigente",
-        "monthLabel": selected_period_label,
+        "subtitle": "Reciclean | valorización, materiales y desempeño operativo del período seleccionado",
+        "periodWindowLabel": dashboard_period_label,
         "sourceFile": INPUT_FILE.name,
         "updatedAt": datetime.now().strftime("%d/%m/%Y %H:%M"),
     },
     "defaultBranch": "Todas",
-    "branchOptions": ["Todas"] + lookup_sources["branches"],
-    "views": {
-        "Todas": build_view(month_df, "Todas"),
-        **{
-            branch: build_view(month_df[month_df["branch"] == branch].copy(), branch)
-            for branch in lookup_sources["branches"]
-        },
-    },
+    "defaultPeriod": period_key(default_period),
+    "periodOptions": period_option_items,
+    "branchOptionsByPeriod": branch_options_by_period,
+    "viewsByPeriod": views_by_period,
     "compact": {
         "lookups": lookup_sources,
         "rows": compact_rows,
@@ -498,7 +528,7 @@ html = f"""<!DOCTYPE html>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dashboard Reciclean | {data["meta"]["monthLabel"]}</title>
+  <title>Dashboard Reciclean | {data["meta"]["periodWindowLabel"]}</title>
   <style>
     :root {{
       --bg: #eef3ea;
@@ -663,6 +693,36 @@ html = f"""<!DOCTYPE html>
       font-size: 0.92rem;
       white-space: normal;
       max-width: 100%;
+    }}
+
+    .chip-select {{
+      gap: 10px;
+      padding-right: 10px;
+    }}
+
+    .chip-select-label {{
+      color: var(--muted);
+      font-weight: 700;
+      white-space: nowrap;
+    }}
+
+    .chip-select select {{
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text);
+      font: inherit;
+      font-weight: 700;
+      min-width: 110px;
+      padding-right: 14px;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+    }}
+
+    .chip-select select:focus {{
+      outline: none;
     }}
 
     .summary-list {{
@@ -1623,8 +1683,14 @@ html = f"""<!DOCTYPE html>
         <h1 id="hero-title"></h1>
         <p class="subtitle" id="hero-subtitle"></p>
         <div class="hero-meta">
-          <span class="chip" id="month-chip"></span>
-          <span class="chip" id="branch-chip"></span>
+          <label class="chip chip-select" for="global-period-select">
+            <span class="chip-select-label">Mes analizado:</span>
+            <select id="global-period-select" aria-label="Mes analizado"></select>
+          </label>
+          <label class="chip chip-select" for="global-branch-select">
+            <span class="chip-select-label">Vista sucursal:</span>
+            <select id="global-branch-select" aria-label="Vista sucursal"></select>
+          </label>
           <span class="chip" id="source-chip"></span>
           <span class="chip" id="updated-chip"></span>
         </div>
@@ -1659,13 +1725,6 @@ html = f"""<!DOCTYPE html>
               <div class="value" id="meta-services"></div>
               <div class="label">servicios presentes</div>
             </div>
-          </div>
-        </div>
-        <div class="aside-card">
-          <strong>Vista de sucursal</strong>
-          <div class="field">
-            <label for="global-branch-select">Sucursal global</label>
-            <select id="global-branch-select"></select>
           </div>
         </div>
         <div class="aside-card">
@@ -1865,13 +1924,15 @@ html = f"""<!DOCTYPE html>
 
   <script>
     const DATA = {json.dumps(data, ensure_ascii=False)};
-    const VIEWS = DATA.views;
+    const VIEWS = DATA.viewsByPeriod;
+    let activePeriod = DATA.defaultPeriod;
     let activeBranch = DATA.defaultBranch;
     const TABLE_ROWS = DATA.compact.rows.map(row => {{
-      const [fecha, folio, cliente, sucursal, servicio, transporte, material, pesoKg, monto, ciudad, origenDestino] = row;
+      const [periodKey, fecha, folio, cliente, sucursal, servicio, transporte, material, pesoKg, monto, ciudad, origenDestino] = row;
       const fechaDate = new Date(`${{fecha}}T00:00:00`);
       const fechaLabel = `${{String(fechaDate.getDate()).padStart(2, '0')}}/${{String(fechaDate.getMonth() + 1).padStart(2, '0')}}/${{fechaDate.getFullYear()}}`;
       return {{
+        periodKey,
         fecha,
         fechaLabel,
         folio,
@@ -1898,8 +1959,20 @@ html = f"""<!DOCTYPE html>
       quality: '<path d="M12 4l7 3v5.3c0 3.6-2.3 6.9-7 7.7-4.7-.8-7-4.1-7-7.7V7l7-3Z" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="m9.2 11.8 1.8 1.8 3.8-4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
     }};
 
+    function branchOptionsForCurrentPeriod() {{
+      return DATA.branchOptionsByPeriod[activePeriod] || [DATA.defaultBranch];
+    }}
+
+    function normalizeActiveBranch() {{
+      if (!branchOptionsForCurrentPeriod().includes(activeBranch)) {{
+        activeBranch = DATA.defaultBranch;
+      }}
+    }}
+
     function currentView() {{
-      return VIEWS[activeBranch] || VIEWS[DATA.defaultBranch];
+      normalizeActiveBranch();
+      const periodViews = VIEWS[activePeriod] || VIEWS[DATA.defaultPeriod];
+      return periodViews[activeBranch] || periodViews[DATA.defaultBranch];
     }}
 
     function currentMeta() {{
@@ -2013,8 +2086,6 @@ html = f"""<!DOCTYPE html>
       const meta = currentMeta();
       document.getElementById('hero-title').textContent = DATA.meta.title;
       document.getElementById('hero-subtitle').textContent = DATA.meta.subtitle;
-      document.getElementById('month-chip').textContent = `Mes analizado: ${{DATA.meta.monthLabel}}`;
-      document.getElementById('branch-chip').textContent = `Vista sucursal: ${{meta.branchLabel}}`;
       document.getElementById('source-chip').textContent = `Fuente: ${{DATA.meta.sourceFile}}`;
       document.getElementById('updated-chip').textContent = `Actualizado: ${{DATA.meta.updatedAt}}`;
       document.getElementById('meta-records').textContent = formatInteger(meta.recordCount);
@@ -2168,10 +2239,15 @@ html = f"""<!DOCTYPE html>
       return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'es'));
     }}
 
+    function getRowsForActivePeriod() {{
+      return TABLE_ROWS.filter(row => row.periodKey === activePeriod);
+    }}
+
     function getScopedRows() {{
+      const rowsForPeriod = getRowsForActivePeriod();
       return activeBranch === DATA.defaultBranch
-        ? TABLE_ROWS
-        : TABLE_ROWS.filter(row => row.sucursal === activeBranch);
+        ? rowsForPeriod
+        : rowsForPeriod.filter(row => row.sucursal === activeBranch);
     }}
 
     function syncSelectValue(select, nextValue) {{
@@ -2180,7 +2256,7 @@ html = f"""<!DOCTYPE html>
     }}
 
     function refreshTableFilters() {{
-      const scopedRows = getScopedRows();
+      const periodRows = getRowsForActivePeriod();
       const branchSelect = document.getElementById('filter-branch');
       const serviceSelect = document.getElementById('filter-service');
       const clientSelect = document.getElementById('filter-client');
@@ -2193,19 +2269,18 @@ html = f"""<!DOCTYPE html>
 
       buildSelect(
         'filter-branch',
-        uniqueValues(scopedRows.map(row => row.sucursal)),
-        activeBranch === DATA.defaultBranch ? 'Todas las sucursales' : activeBranch
+        uniqueValues(periodRows.map(row => row.sucursal)),
+        'Todas las sucursales'
       );
-      branchSelect.disabled = activeBranch !== DATA.defaultBranch;
-      syncSelectValue(branchSelect, activeBranch === DATA.defaultBranch ? previousBranch : activeBranch);
+      syncSelectValue(branchSelect, previousBranch);
 
-      buildSelect('filter-service', uniqueValues(scopedRows.map(row => row.servicio)), 'Todos los servicios');
+      buildSelect('filter-service', uniqueValues(periodRows.map(row => row.servicio)), 'Todos los servicios');
       syncSelectValue(serviceSelect, previousService);
 
-      buildSelect('filter-client', uniqueValues(scopedRows.map(row => row.cliente)), 'Todos los clientes');
+      buildSelect('filter-client', uniqueValues(periodRows.map(row => row.cliente)), 'Todos los clientes');
       syncSelectValue(clientSelect, previousClient);
 
-      const sortedDates = scopedRows.map(row => row.fecha).sort();
+      const sortedDates = periodRows.map(row => row.fecha).sort();
       fromInput.value = sortedDates[0] || '';
       toInput.value = sortedDates[sortedDates.length - 1] || '';
 
@@ -2226,7 +2301,7 @@ html = f"""<!DOCTYPE html>
       const from = document.getElementById('filter-from').value;
       const to = document.getElementById('filter-to').value;
 
-      const rows = getScopedRows().filter(row => {{
+      const rows = getRowsForActivePeriod().filter(row => {{
         const haystack = [
           row.fechaLabel,
           row.folio,
@@ -2323,12 +2398,31 @@ html = f"""<!DOCTYPE html>
       }}, 'Monto diario en CLP');
     }}
 
-    function initGlobalBranchSelect() {{
+    function initGlobalPeriodSelect() {{
+      const select = document.getElementById('global-period-select');
+      select.innerHTML = DATA.periodOptions
+        .map(item => `<option value="${{escapeHtml(item.value)}}">${{escapeHtml(item.label)}}</option>`)
+        .join('');
+      select.value = activePeriod;
+      select.addEventListener('change', event => {{
+        activePeriod = event.target.value || DATA.defaultPeriod;
+        normalizeActiveBranch();
+        rerenderDashboard();
+      }});
+    }}
+
+    function refreshGlobalBranchSelect() {{
       const select = document.getElementById('global-branch-select');
-      select.innerHTML = DATA.branchOptions
+      select.innerHTML = branchOptionsForCurrentPeriod()
         .map(value => `<option value="${{escapeHtml(value)}}">${{escapeHtml(value)}}</option>`)
         .join('');
+      normalizeActiveBranch();
       select.value = activeBranch;
+    }}
+
+    function initGlobalBranchSelect() {{
+      const select = document.getElementById('global-branch-select');
+      refreshGlobalBranchSelect();
       select.addEventListener('change', event => {{
         activeBranch = event.target.value || DATA.defaultBranch;
         rerenderDashboard();
@@ -2336,6 +2430,8 @@ html = f"""<!DOCTYPE html>
     }}
 
     function rerenderDashboard() {{
+      normalizeActiveBranch();
+      refreshGlobalBranchSelect();
       fillHero();
       renderKpis();
       renderResponsiveCharts();
@@ -2348,10 +2444,12 @@ html = f"""<!DOCTYPE html>
       renderQuality();
       renderInsights();
       refreshTableFilters();
+      document.getElementById('global-period-select').value = activePeriod;
       document.getElementById('global-branch-select').value = activeBranch;
     }}
 
     function initDashboard() {{
+      initGlobalPeriodSelect();
       initGlobalBranchSelect();
       initFilters();
       rerenderDashboard();

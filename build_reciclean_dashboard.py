@@ -1735,7 +1735,7 @@ html = f"""<!DOCTYPE html>
         background: #ffffff !important;
       }}
 
-      body.printing-dashboard > *:not(#print-root) {{
+      body.printing-dashboard .page > *:not(#print-root) {{
         display: none !important;
       }}
 
@@ -1743,7 +1743,7 @@ html = f"""<!DOCTYPE html>
         display: block !important;
       }}
 
-      body.printing-dashboard #print-root .page {{
+      body.printing-dashboard .page {{
         max-width: none;
         padding: 0;
       }}
@@ -3571,13 +3571,11 @@ html = f"""<!DOCTYPE html>
 
       const printRoot = document.getElementById('print-root');
       printRoot.innerHTML = `
-        <main class="page">
-          ${{heroMarkup}}
-          ${{filterSummary}}
-          <section class="tab-pane is-active" data-tab-pane="${{activeTab}}">
-            ${{activePaneMarkup}}
-          </section>
-        </main>
+        ${{heroMarkup}}
+        ${{filterSummary}}
+        <section class="tab-pane is-active" data-tab-pane="${{activeTab}}">
+          ${{activePaneMarkup}}
+        </section>
       `;
 
       const cleanup = () => {{

@@ -28,11 +28,11 @@ Sirve para retomar trabajo sin perder contexto técnico, funcional ni operativo.
 - Logout: sí
 - Deploy GitHub: operativo
 - Deploy Render: operativo y verificado
-- Nueva versión en trabajo local: tabs analíticas y exportes sobre el dashboard existente
+- Dashboard sincronizado con publicación y con el Excel más reciente disponible
 
 ## Regla vigente de datos
 - El generador usa siempre el archivo más reciente `vales_detallada_*.xlsx`
-- Archivo más reciente al cierre de esta bitácora: `vales_detallada_2026-05-06_02-47-54.xlsx`
+- Archivo más reciente al cierre de esta bitácora: `vales_detallada_2026-05-12_23-16-33.xlsx`
 - El dashboard hoy expone una ventana seleccionable de:
   - `Febrero 2026`
   - `Marzo 2026`
@@ -154,11 +154,14 @@ Sirve para retomar trabajo sin perder contexto técnico, funcional ni operativo.
 - Se desacopló el filtro `Sucursal` del detalle respecto de `Vista sucursal`
 - Se integró el selector superior en el hero
 
-### Cambio local no publicado aún
-- Exportes V1:
-  - Excel del detalle filtrado
-  - PDF imprimible del tab activo con filtros
-- Pendiente de commit/push si se aprueba
+### Commit `5f2c8e2`
+- `Add export actions for filtered dashboard views`
+- Se agregaron exportes V1 a Excel y PDF sobre la vista filtrada
+
+### Commit `94f2683`
+- `Polish dashboard layout and print export flow`
+- Se mejoró la simetría visual del hero y tabs
+- Se reemplazó la exportación PDF basada en popup por impresión directa
 
 ## Errores encontrados y solución
 
@@ -278,6 +281,7 @@ Estado:
   - tabs visibles
   - exportes visibles
   - flujo PDF corregido
+  - fuente actualizada al Excel más reciente
 
 ## Variables de entorno
 - Requerida:
@@ -293,7 +297,6 @@ Estado:
 ## Pendientes recomendados
 - Hacer una pasada visual final mobile sobre producción
 - Decidir si conviene agregar un selector global de tipo de servicio
-- Publicar la mejora de exportes V1 en GitHub/Render si se aprueba
 - Seguir actualizando esta bitácora después de cada cambio o publicación
 
 ## Regla de mantenimiento para futuras sesiones

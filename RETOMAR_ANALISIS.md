@@ -253,6 +253,22 @@ Solución:
 Estado:
 - Resuelto
 
+### 8. Cálculo incorrecto en "Clientes inactivos 30+ días"
+Problema:
+- La tabla podía mostrar clientes con menos de 30 días reales de inactividad
+- Ejemplo detectado: última visita `30/04/2026` apareciendo como `31` días en mayo parcial
+
+Causa real:
+- El cálculo estaba usando un corte temporal inconsistente con la data visible del mes
+
+Solución:
+- Calcular `daysInactive` contra la última fecha real cargada del período activo
+- Filtrar para mostrar solo clientes con `30` días o más de inactividad efectiva
+
+Estado:
+- Resuelto en local
+- Pendiente de publicación al momento de esta actualización
+
 ## Verificaciones realizadas
 
 ### Local

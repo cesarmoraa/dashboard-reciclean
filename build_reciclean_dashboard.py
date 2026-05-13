@@ -504,13 +504,20 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
         ).reset_index()
         grouped = grouped[~grouped["client"].isin(current_clients)]
         grouped = grouped.sort_values(["amount", "last_visit"], ascending=[False, False]).head(12)
-        end_of_period = pd.Timestamp(active_period.end_time).normalize()
+        cutoff_date = (
+            current_frame["FECHA_DT"].max().normalize()
+            if not current_frame.empty
+            else pd.Timestamp(active_period.end_time).normalize()
+        )
         for _, row in grouped.iterrows():
+            days_inactive = int((cutoff_date - row["last_visit"].normalize()).days)
+            if days_inactive < 30:
+                continue
             inactive_rows.append(
                 {
                     "client": row["client"],
                     "lastVisit": row["last_visit"].strftime("%d/%m/%Y"),
-                    "daysInactive": int((end_of_period - row["last_visit"].normalize()).days),
+                    "daysInactive": days_inactive,
                     "amount": float(row["amount"]),
                     "visits": int(row["visits"]),
                 }

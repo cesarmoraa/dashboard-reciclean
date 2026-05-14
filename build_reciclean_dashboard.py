@@ -1957,39 +1957,69 @@ html = f"""<!DOCTYPE html>
       grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
       margin: 18px 0 22px;
-      padding: 10px;
+      padding: 12px;
       border-radius: 24px;
-      background: rgba(255,255,255,0.72);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.92), rgba(245, 250, 244, 0.88));
       border: 1px solid rgba(40, 68, 53, 0.08);
-      box-shadow: var(--shadow-soft);
+      box-shadow: 0 16px 34px rgba(31, 52, 40, 0.08);
       width: 100%;
     }}
 
     .tab-button {{
+      position: relative;
       appearance: none;
-      border: 0;
-      background: transparent;
-      color: var(--muted);
-      padding: 12px 16px;
-      border-radius: 999px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.22);
+      color: rgba(45, 70, 56, 0.78);
+      padding: 14px 18px;
+      border-radius: 20px;
       font: inherit;
       font-weight: 800;
       letter-spacing: 0.01em;
       cursor: pointer;
-      transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+      transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
       text-align: center;
+      overflow: hidden;
+    }}
+
+    .tab-button::after {{
+      content: "";
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 8px;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(47, 106, 70, 0.16);
+      transform: scaleX(0);
+      transform-origin: center;
+      transition: transform 0.16s ease, background 0.16s ease;
     }}
 
     .tab-button:hover {{
-      background: rgba(47, 106, 70, 0.08);
+      background: rgba(255, 255, 255, 0.72);
       color: var(--green-900);
       transform: translateY(-1px);
+      border-color: rgba(63, 134, 84, 0.18);
+      box-shadow: 0 10px 20px rgba(31, 52, 40, 0.06);
+    }}
+
+    .tab-button:hover::after {{
+      transform: scaleX(0.65);
     }}
 
     .tab-button.is-active {{
-      background: linear-gradient(135deg, var(--green-800), var(--green-600));
+      background: linear-gradient(135deg, #2c7a4d, #63b56a);
       color: #fff;
-      box-shadow: var(--shadow-soft);
+      border-color: rgba(33, 73, 50, 0.12);
+      box-shadow: 0 18px 30px rgba(47, 106, 70, 0.24);
+      transform: translateY(-2px);
+    }}
+
+    .tab-button.is-active::after {{
+      transform: scaleX(1);
+      background: rgba(255, 255, 255, 0.82);
     }}
 
     .tab-pane {{
@@ -2219,6 +2249,7 @@ html = f"""<!DOCTYPE html>
         width: 100%;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         border-radius: 22px;
+        padding: 10px;
       }}
 
       .section-title {{

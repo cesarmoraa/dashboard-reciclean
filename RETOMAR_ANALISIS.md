@@ -359,6 +359,21 @@ Estado:
 - Publicado en GitHub y Render
 - Commit de referencia: `453e4e9` `Add executive client behavior analysis`
 
+## Ajuste visual reciente: tabs más visibles
+Objetivo:
+- Dar más jerarquía visual a la pestaña activa del dashboard.
+
+Implementado:
+- Mayor contraste en el fondo activo
+- Sombra más marcada
+- Borde y elevación sutil en hover
+- Indicador inferior dentro de la pestaña activa
+- Menor competencia visual de las pestañas inactivas
+
+Estado:
+- Implementado en local
+- Pendiente de publicación al momento de esta actualización
+
 ## Regla de mantenimiento para futuras sesiones
 Antes de cerrar cualquier cambio relevante:
 1. actualizar `RETOMAR_ANALISIS.md`

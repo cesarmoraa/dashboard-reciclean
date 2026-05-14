@@ -110,6 +110,7 @@ http://localhost:3000
   - Señala caídas o alzas relevantes en visitas, kilos y monto.
   - Detecta cambios de material dominante.
   - Usa magnitud operada y umbrales más estrictos para reducir ruido.
+  - La columna `Tendencia` ahora especifica la dimensión afectada para evitar ambigüedad visual.
 
 ## Errores encontrados
 - La carpeta actual no estaba dentro de un repositorio Git al inicio del trabajo.

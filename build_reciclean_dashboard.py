@@ -600,6 +600,10 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
                 return ">999%"
             return f"{absolute:.0f}%"
 
+        def add_trend_label(labels: list[str], label: str) -> None:
+            if label not in labels:
+                labels.append(label)
+
         for client in sorted(current_clients):
             current_visits = int(current_stats.loc[client, "visits"]) if client in current_stats.index else 0
             current_amount_client = float(current_stats.loc[client, "amount"]) if client in current_stats.index else 0.0
@@ -638,7 +642,7 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
                 alerts.append(
                     f"Frecuencia cae {behavior_pct_text(visits_pct)} vs prom. previo ({baseline_visits_avg:.1f} visitas/mes)."
                 )
-                trend_labels.append("Caída")
+                add_trend_label(trend_labels, "Frecuencia a la baja")
                 behavior_summary["drops"] += 1
                 score += min(abs(visits_pct or 0), 300)
             elif (
@@ -649,7 +653,7 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
                 alerts.append(
                     f"Frecuencia sube {behavior_pct_text(visits_pct)} vs prom. previo ({baseline_visits_avg:.1f} visitas/mes)."
                 )
-                trend_labels.append("Alza")
+                add_trend_label(trend_labels, "Frecuencia al alza")
                 behavior_summary["gains"] += 1
                 score += min(abs(visits_pct or 0), 300)
 
@@ -657,8 +661,8 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
                 alerts.append(
                     f"Kilos caen {behavior_pct_text(weight_pct)} vs prom. previo ({fmt_number(baseline_weight_avg, 0)} kg/mes)."
                 )
-                if "Caída" not in trend_labels:
-                    trend_labels.append("Caída")
+                if "Frecuencia a la baja" not in trend_labels and "Kilos a la baja" not in trend_labels and "Monto a la baja" not in trend_labels:
+                    add_trend_label(trend_labels, "Kilos a la baja")
                     behavior_summary["drops"] += 1
                 score += min(abs(weight_pct or 0), 300)
             elif (
@@ -669,8 +673,8 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
                 alerts.append(
                     f"Kilos suben {behavior_pct_text(weight_pct)} vs prom. previo ({fmt_number(baseline_weight_avg, 0)} kg/mes)."
                 )
-                if "Alza" not in trend_labels:
-                    trend_labels.append("Alza")
+                if "Frecuencia al alza" not in trend_labels and "Kilos al alza" not in trend_labels and "Monto al alza" not in trend_labels:
+                    add_trend_label(trend_labels, "Kilos al alza")
                     behavior_summary["gains"] += 1
                 score += min(abs(weight_pct or 0), 300)
 
@@ -678,8 +682,12 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
                 alerts.append(
                     f"Monto cae {behavior_pct_text(amount_pct)} vs prom. previo (CLP {fmt_number(baseline_amount_avg)} / mes)."
                 )
-                if "Caída" not in trend_labels:
-                    trend_labels.append("Caída")
+                if (
+                    "Frecuencia a la baja" not in trend_labels
+                    and "Kilos a la baja" not in trend_labels
+                    and "Monto a la baja" not in trend_labels
+                ):
+                    add_trend_label(trend_labels, "Monto a la baja")
                     behavior_summary["drops"] += 1
                 score += min(abs(amount_pct or 0), 300)
             elif (
@@ -690,8 +698,12 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
                 alerts.append(
                     f"Monto sube {behavior_pct_text(amount_pct)} vs prom. previo (CLP {fmt_number(baseline_amount_avg)} / mes)."
                 )
-                if "Alza" not in trend_labels:
-                    trend_labels.append("Alza")
+                if (
+                    "Frecuencia al alza" not in trend_labels
+                    and "Kilos al alza" not in trend_labels
+                    and "Monto al alza" not in trend_labels
+                ):
+                    add_trend_label(trend_labels, "Monto al alza")
                     behavior_summary["gains"] += 1
                 score += min(abs(amount_pct or 0), 300)
 
@@ -703,7 +715,7 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
             ):
                 alerts.append(f"Cambia material dominante: de {baseline_material} a {current_material}.")
                 if "Cambio de mix" not in trend_labels:
-                    trend_labels.append("Cambio de mix")
+                    add_trend_label(trend_labels, "Cambio de mix")
                     behavior_summary["mixChanges"] += 1
                 score += 30
 
@@ -717,7 +729,7 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
                     dormant_days = int((current_frame["FECHA_DT"].max().normalize() - older_last_visit.normalize()).days)
                     alerts.append(f"Cliente reactivado tras {dormant_days} días sin movimientos en la ventana reciente.")
                     if "Reactivado" not in trend_labels:
-                        trend_labels.append("Reactivado")
+                        add_trend_label(trend_labels, "Reactivado")
                         behavior_summary["reactivated"] += 1
                     score += max(25, dormant_days / 2)
 

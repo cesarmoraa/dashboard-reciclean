@@ -348,6 +348,11 @@ Ajustes técnicos aplicados para reducir ruido:
 - Para comportamiento se usan montos y kilos por `magnitud operada`, evitando distorsión por signos negativos
 - Se endurecieron umbrales para no elevar alertas irrelevantes en clientes pequeños
 - Se redujo la sensibilidad de `alzas` y `caídas` para que la tabla quede más gerencial
+- La columna `Tendencia` se hizo explícita por dimensión, por ejemplo:
+  - `Frecuencia a la baja`
+  - `Kilos al alza`
+  - `Monto a la baja`
+  - `Cambio de mix`
 
 Estado:
 - Implementado en local

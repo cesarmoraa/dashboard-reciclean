@@ -105,6 +105,11 @@ http://localhost:3000
 - Filtro `Sucursal` del detalle desacoplado de la vista global.
 - `Exportar Excel` del detalle filtrado.
 - `Exportar PDF` del tab activo con filtros visibles, usando impresión directa del navegador en vez de popup externo.
+- Nueva capa ejecutiva de comportamiento por cliente en `Histórico y Tendencias`.
+  - Compara el mes activo contra el promedio de hasta `3 meses previos`.
+  - Señala caídas o alzas relevantes en visitas, kilos y monto.
+  - Detecta cambios de material dominante.
+  - Usa magnitud operada y umbrales más estrictos para reducir ruido.
 
 ## Errores encontrados
 - La carpeta actual no estaba dentro de un repositorio Git al inicio del trabajo.

@@ -316,6 +316,43 @@ Estado:
 - Decidir si conviene agregar un selector global de tipo de servicio
 - Seguir actualizando esta bitácora después de cada cambio o publicación
 
+## Avance reciente: análisis de comportamiento por cliente
+
+### 9. Nueva capa ejecutiva de frecuencia y comportamiento
+Objetivo:
+- Agregar una lectura ejecutiva en `Histórico y Tendencias` para detectar cambios relevantes por cliente en:
+  - frecuencia de visitas
+  - kilos operados
+  - monto operado
+  - material dominante
+
+Implementado:
+- Bloque nuevo `Patrones y cambios de comportamiento`
+- Resumen superior con:
+  - clientes con caída
+  - clientes con alza
+  - cambio de material
+  - clientes reactivados
+- Tabla con:
+  - cliente
+  - tendencia
+  - visitas actual vs promedio previo
+  - kilos actual vs promedio previo
+  - monto actual vs promedio previo
+  - material dominante actual y previo
+  - cambio detectado
+  - nivel de alerta
+
+Ajustes técnicos aplicados para reducir ruido:
+- La comparación usa una ventana de hasta `3 meses previos`
+- Para comportamiento se usan montos y kilos por `magnitud operada`, evitando distorsión por signos negativos
+- Se endurecieron umbrales para no elevar alertas irrelevantes en clientes pequeños
+- Se redujo la sensibilidad de `alzas` y `caídas` para que la tabla quede más gerencial
+
+Estado:
+- Implementado en local
+- Pendiente de publicación al momento de esta actualización
+
 ## Regla de mantenimiento para futuras sesiones
 Antes de cerrar cualquier cambio relevante:
 1. actualizar `RETOMAR_ANALISIS.md`

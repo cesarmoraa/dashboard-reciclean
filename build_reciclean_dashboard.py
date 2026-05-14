@@ -195,19 +195,26 @@ quality_cols = {
 }
 
 
-def build_flat_df(frame: pd.DataFrame) -> pd.DataFrame:
+def build_flat_df(frame: pd.DataFrame, use_magnitude: bool = False) -> pd.DataFrame:
     flat_rows: list[dict[str, object]] = []
     for _, row in frame.iterrows():
         materials = split_materials(row["DESC PRODUCTO"])
         share = 1 / len(materials)
+        amount_value = float(row["amount"])
+        weight_value = float(0 if pd.isna(row["weight"]) else row["weight"])
+        if use_magnitude:
+            amount_value = abs(amount_value)
+            weight_value = abs(weight_value)
         for material in materials:
             flat_rows.append(
                 {
                     "material": material,
                     "family": family_from_material(material),
-                    "amount": float(row["amount"]) * share,
-                    "weight": float(0 if pd.isna(row["weight"]) else row["weight"]) * share,
+                    "amount": amount_value * share,
+                    "weight": weight_value * share,
                     "folio": int(row["FOLIO"]),
+                    "client": row["client"],
+                    "periodKey": row["periodKey"],
                 }
             )
     return pd.DataFrame(flat_rows)
@@ -529,6 +536,222 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
                 }
             )
 
+    behavior_rows: list[dict[str, object]] = []
+    behavior_summary = {
+        "drops": 0,
+        "gains": 0,
+        "mixChanges": 0,
+        "reactivated": 0,
+    }
+    behavior_window_label = "Sin base histórica suficiente"
+    if trailing_periods and not current_frame.empty:
+        baseline_month_count = len(trailing_periods)
+        behavior_window_label = f"Compara el mes activo contra el promedio de {baseline_month_count} mes{'es' if baseline_month_count != 1 else ''} previo{'s' if baseline_month_count != 1 else ''}."
+        older_frame = full_df[full_df["FECHA_DT"].dt.to_period("M") < trailing_periods[0]].copy()
+        older_clients = set(older_frame["client"].tolist())
+
+        current_behavior = current_frame.copy()
+        baseline_behavior = trailing_frame.copy()
+        current_behavior["behaviorAmount"] = current_behavior["amount"].abs()
+        current_behavior["behaviorWeight"] = current_behavior["weight"].abs()
+        baseline_behavior["behaviorAmount"] = baseline_behavior["amount"].abs()
+        baseline_behavior["behaviorWeight"] = baseline_behavior["weight"].abs()
+
+        current_stats = current_behavior.groupby("client").agg(
+            visits=("FOLIO", "count"),
+            amount=("behaviorAmount", "sum"),
+            weight=("behaviorWeight", "sum"),
+        )
+        baseline_stats = baseline_behavior.groupby("client").agg(
+            visits=("FOLIO", "count"),
+            amount=("behaviorAmount", "sum"),
+            weight=("behaviorWeight", "sum"),
+            last_visit=("FECHA_DT", "max"),
+        )
+
+        current_flat = build_flat_df(current_behavior, use_magnitude=True)
+        baseline_flat = build_flat_df(baseline_behavior, use_magnitude=True)
+
+        def dominant_materials(flat_df: pd.DataFrame) -> dict[str, str]:
+            if flat_df.empty:
+                return {}
+            enriched = flat_df.copy()
+            enriched["weightForRank"] = enriched["weight"].fillna(0.0)
+            grouped = (
+                enriched.groupby(["client", "material"])
+                .agg(weight=("weightForRank", "sum"), amount=("amount", "sum"))
+                .reset_index()
+                .sort_values(["client", "weight", "amount"], ascending=[True, False, False])
+            )
+            dominant: dict[str, str] = {}
+            for client, client_frame in grouped.groupby("client"):
+                top_row = client_frame.iloc[0]
+                dominant[str(client)] = str(top_row["material"])
+            return dominant
+
+        current_materials = dominant_materials(current_flat)
+        baseline_materials = dominant_materials(baseline_flat)
+
+        def behavior_pct_text(value: float | None) -> str:
+            if value is None or pd.isna(value):
+                return "Sin base"
+            absolute = abs(float(value))
+            if absolute > 999:
+                return ">999%"
+            return f"{absolute:.0f}%"
+
+        for client in sorted(current_clients):
+            current_visits = int(current_stats.loc[client, "visits"]) if client in current_stats.index else 0
+            current_amount_client = float(current_stats.loc[client, "amount"]) if client in current_stats.index else 0.0
+            current_weight_client = float(current_stats.loc[client, "weight"]) if client in current_stats.index and pd.notna(current_stats.loc[client, "weight"]) else 0.0
+
+            baseline_visits_total = float(baseline_stats.loc[client, "visits"]) if client in baseline_stats.index else 0.0
+            baseline_amount_total = float(baseline_stats.loc[client, "amount"]) if client in baseline_stats.index else 0.0
+            baseline_weight_total = float(baseline_stats.loc[client, "weight"]) if client in baseline_stats.index and pd.notna(baseline_stats.loc[client, "weight"]) else 0.0
+
+            baseline_visits_avg = baseline_visits_total / baseline_month_count
+            baseline_amount_avg = baseline_amount_total / baseline_month_count
+            baseline_weight_avg = baseline_weight_total / baseline_month_count
+
+            meaningful_baseline = (
+                baseline_visits_avg >= 3
+                or baseline_amount_avg >= 250000
+                or baseline_weight_avg >= 2000
+            )
+            meaningful_current = (
+                current_visits >= 3
+                or current_amount_client >= 250000
+                or current_weight_client >= 2000
+            )
+
+            visits_pct = delta_percent(float(current_visits), baseline_visits_avg)
+            amount_pct = delta_percent(current_amount_client, baseline_amount_avg)
+            weight_pct = delta_percent(current_weight_client, baseline_weight_avg)
+
+            current_material = current_materials.get(client, "Sin dato")
+            baseline_material = baseline_materials.get(client, "Sin dato")
+            alerts: list[str] = []
+            trend_labels: list[str] = []
+            score = 0.0
+
+            if baseline_visits_avg >= 3 and current_visits <= max(0, baseline_visits_avg * 0.6):
+                alerts.append(
+                    f"Frecuencia cae {behavior_pct_text(visits_pct)} vs prom. previo ({baseline_visits_avg:.1f} visitas/mes)."
+                )
+                trend_labels.append("Caída")
+                behavior_summary["drops"] += 1
+                score += min(abs(visits_pct or 0), 300)
+            elif (
+                baseline_visits_avg >= 1
+                and meaningful_current
+                and current_visits >= max(baseline_visits_avg * 1.5, baseline_visits_avg + 2, 3)
+            ):
+                alerts.append(
+                    f"Frecuencia sube {behavior_pct_text(visits_pct)} vs prom. previo ({baseline_visits_avg:.1f} visitas/mes)."
+                )
+                trend_labels.append("Alza")
+                behavior_summary["gains"] += 1
+                score += min(abs(visits_pct or 0), 300)
+
+            if baseline_weight_avg >= 2000 and current_weight_client <= baseline_weight_avg * 0.65:
+                alerts.append(
+                    f"Kilos caen {behavior_pct_text(weight_pct)} vs prom. previo ({fmt_number(baseline_weight_avg, 0)} kg/mes)."
+                )
+                if "Caída" not in trend_labels:
+                    trend_labels.append("Caída")
+                    behavior_summary["drops"] += 1
+                score += min(abs(weight_pct or 0), 300)
+            elif (
+                baseline_weight_avg >= 1000
+                and meaningful_current
+                and current_weight_client >= max(baseline_weight_avg * 1.5, baseline_weight_avg + 1500)
+            ):
+                alerts.append(
+                    f"Kilos suben {behavior_pct_text(weight_pct)} vs prom. previo ({fmt_number(baseline_weight_avg, 0)} kg/mes)."
+                )
+                if "Alza" not in trend_labels:
+                    trend_labels.append("Alza")
+                    behavior_summary["gains"] += 1
+                score += min(abs(weight_pct or 0), 300)
+
+            if baseline_amount_avg >= 250000 and current_amount_client <= baseline_amount_avg * 0.65:
+                alerts.append(
+                    f"Monto cae {behavior_pct_text(amount_pct)} vs prom. previo (CLP {fmt_number(baseline_amount_avg)} / mes)."
+                )
+                if "Caída" not in trend_labels:
+                    trend_labels.append("Caída")
+                    behavior_summary["drops"] += 1
+                score += min(abs(amount_pct or 0), 300)
+            elif (
+                baseline_amount_avg >= 250000
+                and meaningful_current
+                and current_amount_client >= max(baseline_amount_avg * 1.5, baseline_amount_avg + 200000)
+            ):
+                alerts.append(
+                    f"Monto sube {behavior_pct_text(amount_pct)} vs prom. previo (CLP {fmt_number(baseline_amount_avg)} / mes)."
+                )
+                if "Alza" not in trend_labels:
+                    trend_labels.append("Alza")
+                    behavior_summary["gains"] += 1
+                score += min(abs(amount_pct or 0), 300)
+
+            if (
+                current_material != "Sin dato"
+                and baseline_material != "Sin dato"
+                and current_material != baseline_material
+                and (meaningful_baseline or meaningful_current)
+            ):
+                alerts.append(f"Cambia material dominante: de {baseline_material} a {current_material}.")
+                if "Cambio de mix" not in trend_labels:
+                    trend_labels.append("Cambio de mix")
+                    behavior_summary["mixChanges"] += 1
+                score += 30
+
+            if (
+                baseline_visits_total == 0
+                and client in older_clients
+                and (current_visits >= 2 or current_amount_client >= 100000 or current_weight_client >= 1000)
+            ):
+                older_last_visit = older_frame.loc[older_frame["client"] == client, "FECHA_DT"].max()
+                if pd.notna(older_last_visit):
+                    dormant_days = int((current_frame["FECHA_DT"].max().normalize() - older_last_visit.normalize()).days)
+                    alerts.append(f"Cliente reactivado tras {dormant_days} días sin movimientos en la ventana reciente.")
+                    if "Reactivado" not in trend_labels:
+                        trend_labels.append("Reactivado")
+                        behavior_summary["reactivated"] += 1
+                    score += max(25, dormant_days / 2)
+
+            if not alerts or (not meaningful_baseline and not meaningful_current and "Reactivado" not in trend_labels):
+                continue
+
+            severity = "critical" if len(alerts) >= 3 or score >= 180 else "warning"
+            behavior_rows.append(
+                {
+                    "client": client,
+                    "trend": " · ".join(trend_labels) if trend_labels else "Seguimiento",
+                    "visitsCurrent": current_visits,
+                    "visitsBaselineAvg": round(baseline_visits_avg, 1),
+                    "weightCurrentKg": current_weight_client,
+                    "weightBaselineAvgKg": baseline_weight_avg,
+                    "amountCurrent": current_amount_client,
+                    "amountBaselineAvg": baseline_amount_avg,
+                    "materialCurrent": current_material,
+                    "materialBaseline": baseline_material,
+                    "alerts": alerts,
+                    "severity": severity,
+                    "score": score,
+                }
+            )
+
+        behavior_rows = sorted(
+            behavior_rows,
+            key=lambda item: (
+                0 if item["severity"] == "critical" else 1,
+                -item["score"],
+                -item["amountCurrent"],
+            ),
+        )[:12]
+
     current_amount = float(current_frame["amount"].sum())
     current_weight = float(current_frame["weight"].sum(skipna=True))
     current_records = int(len(current_frame))
@@ -552,6 +775,32 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
             "previousRecords": previous_records,
         },
         "inactiveClients": inactive_rows,
+        "behavior": {
+            "windowLabel": behavior_window_label,
+            "summary": [
+                {
+                    "label": "Clientes con caída",
+                    "value": behavior_summary["drops"],
+                    "foot": "Frecuencia, kilos o monto por debajo del patrón reciente.",
+                },
+                {
+                    "label": "Clientes con alza",
+                    "value": behavior_summary["gains"],
+                    "foot": "Incrementos relevantes de actividad o valorización.",
+                },
+                {
+                    "label": "Cambio de material",
+                    "value": behavior_summary["mixChanges"],
+                    "foot": "Cambio detectado en el material dominante del cliente.",
+                },
+                {
+                    "label": "Clientes reactivados",
+                    "value": behavior_summary["reactivated"],
+                    "foot": "Vuelven a operar tras salir de la ventana reciente.",
+                },
+            ],
+            "rows": behavior_rows,
+        },
     }
 
 
@@ -2595,6 +2844,34 @@ html = f"""<!DOCTYPE html>
             </table>
           </div>
         </article>
+
+        <article class="panel span-12">
+          <div class="panel-header">
+            <div>
+              <h3 class="panel-title">Patrones y cambios de comportamiento</h3>
+              <p class="panel-subtitle">Señales ejecutivas de cambio en frecuencia, kilos, monto y material dominante por cliente.</p>
+            </div>
+          </div>
+          <div class="metric-strip" id="behavior-summary-cards"></div>
+          <div class="footnote" id="behavior-window-note"></div>
+          <div class="table-wrap" style="margin-top: 14px;">
+            <table class="simple-table">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Tendencia</th>
+                  <th>Visitas</th>
+                  <th>Kilos</th>
+                  <th>Monto</th>
+                  <th>Material dominante</th>
+                  <th>Cambio detectado</th>
+                  <th>Nivel</th>
+                </tr>
+              </thead>
+              <tbody id="behavior-table-body"></tbody>
+            </table>
+          </div>
+        </article>
       </section>
     </section>
 
@@ -3110,6 +3387,30 @@ html = f"""<!DOCTYPE html>
           </tr>
         `).join('')
         : `<tr><td colspan="5"><div class="empty-state">No se detectan clientes inactivos dentro de la ventana comparada.</div></td></tr>`;
+
+      const behavior = history.behavior || {{ summary: [], rows: [], windowLabel: 'Sin base suficiente' }};
+      document.getElementById('behavior-summary-cards').innerHTML = (behavior.summary || []).map(card => `
+        <article class="metric-pill">
+          <div class="label">${{card.label}}</div>
+          <div class="value">${{formatInteger(card.value)}}</div>
+          <div class="foot">${{card.foot}}</div>
+        </article>
+      `).join('');
+      document.getElementById('behavior-window-note').textContent = behavior.windowLabel || 'Sin base suficiente para comparar comportamiento.';
+      document.getElementById('behavior-table-body').innerHTML = (behavior.rows || []).length
+        ? behavior.rows.map(item => `
+          <tr>
+            <td>${{escapeHtml(item.client)}}</td>
+            <td>${{escapeHtml(item.trend)}}</td>
+            <td class="num">${{formatInteger(item.visitsCurrent)}} vs ${{item.visitsBaselineAvg.toLocaleString('es-CL', {{ minimumFractionDigits: 1, maximumFractionDigits: 1 }})}}</td>
+            <td class="num">${{formatWeight(item.weightCurrentKg)}} vs ${{formatWeight(item.weightBaselineAvgKg)}}</td>
+            <td class="money">CLP ${{formatCurrency(item.amountCurrent)}} vs CLP ${{formatCurrency(item.amountBaselineAvg)}}</td>
+            <td>${{escapeHtml(item.materialCurrent)}}${{item.materialBaseline !== item.materialCurrent ? `<div class="footnote">Antes: ${{escapeHtml(item.materialBaseline)}}</div>` : ''}}</td>
+            <td><div class="tag-list">${{item.alerts.map(alert => `<span class="tag">${{escapeHtml(alert)}}</span>`).join('')}}</div></td>
+            <td><span class="status-chip ${{item.severity}}">${{item.severity === 'critical' ? 'Alerta alta' : 'Seguimiento'}}</span></td>
+          </tr>
+        `).join('')
+        : `<tr><td colspan="8"><div class="empty-state">No se detectan cambios relevantes de comportamiento con la ventana histórica actual.</div></td></tr>`;
     }}
 
     function renderRiskTab() {{

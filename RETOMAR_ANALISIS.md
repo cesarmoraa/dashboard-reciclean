@@ -32,13 +32,14 @@ Sirve para retomar trabajo sin perder contexto técnico, funcional ni operativo.
 
 ## Regla vigente de datos
 - El generador usa siempre el archivo más reciente `vales_detallada_*.xlsx`
-- Archivo más reciente al cierre de esta bitácora: `vales_detallada_2026-05-12_23-16-33.xlsx`
+- Archivo más reciente al cierre de esta bitácora: `vales_detallada_2026-05-14_17-28-21.xlsx`
 - El dashboard hoy expone una ventana seleccionable de:
   - `Febrero 2026`
   - `Marzo 2026`
   - `Abril 2026`
   - `Mayo 2026`
 - La ventana general reconocida por el archivo es: `Febrero a mayo 2026`
+- El criterio de selección del archivo se corrigió para usar el timestamp del nombre (`vales_detallada_YYYY-MM-DD_HH-MM-SS.xlsx`) y no el `mtime` del archivo, porque OneDrive podía dejar un corte más nuevo fuera del dashboard.
 
 ## Estructura importante
 - `server.js`

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -42,14 +43,19 @@ SHORT_MONTHS_ES = {
 
 
 def resolve_input_file() -> Path:
-    candidates = sorted(
-        BASE_DIR.glob("vales_detallada_*.xlsx"),
-        key=lambda path: path.stat().st_mtime,
-        reverse=True,
-    )
+    pattern = re.compile(r"vales_detallada_(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})\.xlsx$")
+    candidates = list(BASE_DIR.glob("vales_detallada_*.xlsx"))
     if not candidates:
         raise FileNotFoundError("No encontré archivos vales_detallada_*.xlsx en la carpeta actual.")
-    return candidates[0]
+
+    def candidate_key(path: Path) -> tuple[datetime, float]:
+        match = pattern.match(path.name)
+        if match:
+            stamp = datetime.strptime(f"{match.group(1)} {match.group(2)}", "%Y-%m-%d %H-%M-%S")
+            return stamp, path.stat().st_mtime
+        return datetime.min, path.stat().st_mtime
+
+    return sorted(candidates, key=candidate_key, reverse=True)[0]
 
 
 def normalize_text(value: object) -> str:

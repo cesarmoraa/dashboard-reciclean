@@ -351,7 +351,8 @@ Ajustes técnicos aplicados para reducir ruido:
 
 Estado:
 - Implementado en local
-- Pendiente de publicación al momento de esta actualización
+- Publicado en GitHub y Render
+- Commit de referencia: `453e4e9` `Add executive client behavior analysis`
 
 ## Regla de mantenimiento para futuras sesiones
 Antes de cerrar cualquier cambio relevante:

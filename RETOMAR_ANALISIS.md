@@ -374,6 +374,18 @@ Estado:
 - Implementado en local
 - Pendiente de publicación al momento de esta actualización
 
+## Refresh de datos más reciente
+Fecha:
+- `17/05/2026`
+
+Archivo aplicado:
+- `vales_detallada_2026-05-17_23-13-11.xlsx`
+
+Resultado:
+- Dashboard regenerado correctamente con el archivo más reciente detectado por timestamp del nombre
+- `sourceFile` del HTML actualizado al corte `17/05/2026`
+- Ventana histórica conservada en `Febrero a mayo 2026`
+
 ## Regla de mantenimiento para futuras sesiones
 Antes de cerrar cualquier cambio relevante:
 1. actualizar `RETOMAR_ANALISIS.md`

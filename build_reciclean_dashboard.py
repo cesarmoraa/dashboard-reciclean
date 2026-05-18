@@ -537,11 +537,11 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
             )
 
     behavior_rows: list[dict[str, object]] = []
-    behavior_summary = {
-        "drops": 0,
-        "gains": 0,
-        "mixChanges": 0,
-        "reactivated": 0,
+    behavior_clients = {
+        "drops": set(),
+        "gains": set(),
+        "mixChanges": set(),
+        "reactivated": set(),
     }
     behavior_window_label = "Sin base histórica suficiente"
     if trailing_periods and not current_frame.empty:
@@ -643,7 +643,7 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
                     f"Frecuencia cae {behavior_pct_text(visits_pct)} vs prom. previo ({baseline_visits_avg:.1f} visitas/mes)."
                 )
                 add_trend_label(trend_labels, "Frecuencia a la baja")
-                behavior_summary["drops"] += 1
+                behavior_clients["drops"].add(client)
                 score += min(abs(visits_pct or 0), 300)
             elif (
                 baseline_visits_avg >= 1
@@ -654,7 +654,7 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
                     f"Frecuencia sube {behavior_pct_text(visits_pct)} vs prom. previo ({baseline_visits_avg:.1f} visitas/mes)."
                 )
                 add_trend_label(trend_labels, "Frecuencia al alza")
-                behavior_summary["gains"] += 1
+                behavior_clients["gains"].add(client)
                 score += min(abs(visits_pct or 0), 300)
 
             if baseline_weight_avg >= 2000 and current_weight_client <= baseline_weight_avg * 0.65:
@@ -663,7 +663,7 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
                 )
                 if "Frecuencia a la baja" not in trend_labels and "Kilos a la baja" not in trend_labels and "Monto a la baja" not in trend_labels:
                     add_trend_label(trend_labels, "Kilos a la baja")
-                    behavior_summary["drops"] += 1
+                behavior_clients["drops"].add(client)
                 score += min(abs(weight_pct or 0), 300)
             elif (
                 baseline_weight_avg >= 1000
@@ -675,7 +675,7 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
                 )
                 if "Frecuencia al alza" not in trend_labels and "Kilos al alza" not in trend_labels and "Monto al alza" not in trend_labels:
                     add_trend_label(trend_labels, "Kilos al alza")
-                    behavior_summary["gains"] += 1
+                behavior_clients["gains"].add(client)
                 score += min(abs(weight_pct or 0), 300)
 
             if baseline_amount_avg >= 250000 and current_amount_client <= baseline_amount_avg * 0.65:
@@ -688,7 +688,7 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
                     and "Monto a la baja" not in trend_labels
                 ):
                     add_trend_label(trend_labels, "Monto a la baja")
-                    behavior_summary["drops"] += 1
+                behavior_clients["drops"].add(client)
                 score += min(abs(amount_pct or 0), 300)
             elif (
                 baseline_amount_avg >= 250000
@@ -704,7 +704,7 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
                     and "Monto al alza" not in trend_labels
                 ):
                     add_trend_label(trend_labels, "Monto al alza")
-                    behavior_summary["gains"] += 1
+                behavior_clients["gains"].add(client)
                 score += min(abs(amount_pct or 0), 300)
 
             if (
@@ -716,7 +716,7 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
                 alerts.append(f"Cambia material dominante: de {baseline_material} a {current_material}.")
                 if "Cambio de mix" not in trend_labels:
                     add_trend_label(trend_labels, "Cambio de mix")
-                    behavior_summary["mixChanges"] += 1
+                behavior_clients["mixChanges"].add(client)
                 score += 30
 
             if (
@@ -730,7 +730,7 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
                     alerts.append(f"Cliente reactivado tras {dormant_days} días sin movimientos en la ventana reciente.")
                     if "Reactivado" not in trend_labels:
                         add_trend_label(trend_labels, "Reactivado")
-                        behavior_summary["reactivated"] += 1
+                    behavior_clients["reactivated"].add(client)
                     score += max(25, dormant_days / 2)
 
             if not alerts or (not meaningful_baseline and not meaningful_current and "Reactivado" not in trend_labels):
@@ -792,23 +792,41 @@ def build_history_data(active_period: pd.Period) -> dict[str, object]:
             "summary": [
                 {
                     "label": "Clientes con caída",
-                    "value": behavior_summary["drops"],
-                    "foot": "Frecuencia, kilos o monto por debajo del patrón reciente.",
+                    "value": len(behavior_clients["drops"]),
+                    "foot": "Clientes únicos con al menos una caída relevante.",
                 },
                 {
                     "label": "Clientes con alza",
-                    "value": behavior_summary["gains"],
-                    "foot": "Incrementos relevantes de actividad o valorización.",
+                    "value": len(behavior_clients["gains"]),
+                    "foot": "Clientes únicos con alza relevante de actividad o valorización.",
                 },
                 {
                     "label": "Cambio de material",
-                    "value": behavior_summary["mixChanges"],
-                    "foot": "Cambio detectado en el material dominante del cliente.",
+                    "value": len(behavior_clients["mixChanges"]),
+                    "foot": "Clientes únicos con cambio detectado en el material dominante.",
                 },
                 {
                     "label": "Clientes reactivados",
-                    "value": behavior_summary["reactivated"],
+                    "value": len(behavior_clients["reactivated"]),
                     "foot": "Vuelven a operar tras salir de la ventana reciente.",
+                },
+            ],
+            "highlights": [
+                {
+                    "label": "Clientes con caída",
+                    "clients": sorted(behavior_clients["drops"]),
+                },
+                {
+                    "label": "Clientes con alza",
+                    "clients": sorted(behavior_clients["gains"]),
+                },
+                {
+                    "label": "Cambio de material",
+                    "clients": sorted(behavior_clients["mixChanges"]),
+                },
+                {
+                    "label": "Clientes reactivados",
+                    "clients": sorted(behavior_clients["reactivated"]),
                 },
             ],
             "rows": behavior_rows,
@@ -2166,6 +2184,32 @@ html = f"""<!DOCTYPE html>
       gap: 6px;
     }}
 
+    .behavior-highlights {{
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }}
+
+    .behavior-highlight {{
+      display: grid;
+      gap: 6px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(245, 250, 244, 0.9);
+      border: 1px solid rgba(40, 68, 53, 0.08);
+    }}
+
+    .behavior-highlight strong {{
+      color: var(--green-900);
+      font-size: 0.92rem;
+    }}
+
+    .behavior-highlight span {{
+      color: var(--muted);
+      line-height: 1.55;
+      font-size: 0.93rem;
+    }}
+
     .tag {{
       display: inline-flex;
       align-items: center;
@@ -2897,6 +2941,7 @@ html = f"""<!DOCTYPE html>
           </div>
           <div class="metric-strip" id="behavior-summary-cards"></div>
           <div class="footnote" id="behavior-window-note"></div>
+          <div class="behavior-highlights" id="behavior-highlights"></div>
           <div class="table-wrap" style="margin-top: 14px;">
             <table class="simple-table">
               <thead>
@@ -3440,6 +3485,15 @@ html = f"""<!DOCTYPE html>
         </article>
       `).join('');
       document.getElementById('behavior-window-note').textContent = behavior.windowLabel || 'Sin base suficiente para comparar comportamiento.';
+      const behaviorHighlights = (behavior.highlights || []).filter(item => (item.clients || []).length);
+      document.getElementById('behavior-highlights').innerHTML = behaviorHighlights.length
+        ? behaviorHighlights.map(item => `
+          <div class="behavior-highlight">
+            <strong>${{escapeHtml(item.label)}}</strong>
+            <span>${{escapeHtml(item.clients.join(', '))}}</span>
+          </div>
+        `).join('')
+        : '';
       document.getElementById('behavior-table-body').innerHTML = (behavior.rows || []).length
         ? behavior.rows.map(item => `
           <tr>

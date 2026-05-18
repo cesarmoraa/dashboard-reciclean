@@ -111,6 +111,7 @@ http://localhost:3000
   - Detecta cambios de material dominante.
   - Usa magnitud operada y umbrales más estrictos para reducir ruido.
   - La columna `Tendencia` ahora especifica la dimensión afectada para evitar ambigüedad visual.
+  - Se añadió un resumen visible con nombres por categoría para hacer más legible quién integra cada grupo.
 
 ## Errores encontrados
 - La carpeta actual no estaba dentro de un repositorio Git al inicio del trabajo.

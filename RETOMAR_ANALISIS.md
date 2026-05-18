@@ -353,6 +353,7 @@ Ajustes técnicos aplicados para reducir ruido:
   - `Kilos al alza`
   - `Monto a la baja`
   - `Cambio de mix`
+- Se agregó un bloque resumen con nombres por categoría para que el equipo vea directamente quiénes componen cada grupo, sin depender solo de la tabla.
 
 Estado:
 - Implementado en local

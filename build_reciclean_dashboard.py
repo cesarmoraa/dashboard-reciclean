@@ -2225,6 +2225,118 @@ html = f"""<!DOCTYPE html>
       color: var(--green-800);
     }}
 
+    .ms-dropdown {{
+      position: relative;
+    }}
+
+    .ms-toggle {{
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(40, 68, 53, 0.22);
+      background: #fff;
+      color: var(--green-900);
+      font-size: 0.92rem;
+      cursor: pointer;
+      text-align: left;
+    }}
+
+    .ms-toggle:hover {{
+      border-color: rgba(40, 68, 53, 0.4);
+    }}
+
+    .ms-toggle .ms-caret {{
+      color: var(--green-800);
+      font-size: 0.8rem;
+    }}
+
+    .ms-panel {{
+      position: absolute;
+      z-index: 30;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      background: #fff;
+      border: 1px solid rgba(40, 68, 53, 0.22);
+      border-radius: 12px;
+      box-shadow: 0 18px 40px rgba(20, 40, 30, 0.18);
+      padding: 10px;
+    }}
+
+    .ms-panel[hidden] {{
+      display: none;
+    }}
+
+    .ms-panel input[type="search"] {{
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 9px;
+      border: 1px solid rgba(40, 68, 53, 0.22);
+      font-size: 0.88rem;
+      margin-bottom: 8px;
+    }}
+
+    .ms-actions {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }}
+
+    .ms-actions button {{
+      border: none;
+      background: #eef3ea;
+      color: var(--green-800);
+      padding: 5px 10px;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      cursor: pointer;
+    }}
+
+    .ms-actions button:hover {{
+      background: #e2ebdd;
+    }}
+
+    .ms-options {{
+      max-height: 240px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }}
+
+    .ms-option {{
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 7px 8px;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      cursor: pointer;
+      color: var(--green-900);
+    }}
+
+    .ms-option:hover {{
+      background: #f2f7ef;
+    }}
+
+    .ms-option input {{
+      width: 16px;
+      height: 16px;
+      accent-color: var(--green-800);
+      cursor: pointer;
+    }}
+
+    .ms-option.is-hidden {{
+      display: none;
+    }}
+
     .simple-table {{
       width: 100%;
       border-collapse: collapse;
@@ -3161,8 +3273,20 @@ html = f"""<!DOCTYPE html>
       <section class="filters-card">
         <div class="filters-grid">
           <div class="field">
-            <label for="planta-filter-mes">Mes</label>
-            <select id="planta-filter-mes"></select>
+            <label>Mes</label>
+            <div class="ms-dropdown" id="planta-mes-dd">
+              <button type="button" class="ms-toggle" id="planta-mes-toggle" aria-expanded="false">
+                <span id="planta-mes-label">(Todas)</span>
+                <span class="ms-caret">▾</span>
+              </button>
+              <div class="ms-panel" id="planta-mes-panel" hidden>
+                <div class="ms-actions">
+                  <button type="button" id="planta-mes-clear">Quitar selección</button>
+                  <span id="planta-mes-selcount"></span>
+                </div>
+                <div class="ms-options" id="planta-mes-options"></div>
+              </div>
+            </div>
           </div>
           <div class="field">
             <label for="planta-filter-anio">Año</label>
@@ -3177,8 +3301,21 @@ html = f"""<!DOCTYPE html>
             <select id="planta-filter-estado"></select>
           </div>
           <div class="field" style="grid-column: span 2;">
-            <label for="planta-filter-razon">Razón Social <span class="footnote">(Ctrl/Cmd para elegir varios)</span></label>
-            <select id="planta-filter-razon" multiple size="4"></select>
+            <label>Razón Social</label>
+            <div class="ms-dropdown" id="planta-razon-dd">
+              <button type="button" class="ms-toggle" id="planta-razon-toggle" aria-expanded="false">
+                <span id="planta-razon-label">(Todas)</span>
+                <span class="ms-caret">▾</span>
+              </button>
+              <div class="ms-panel" id="planta-razon-panel" hidden>
+                <input type="search" id="planta-razon-search" placeholder="Buscar razón social..." autocomplete="off" />
+                <div class="ms-actions">
+                  <button type="button" id="planta-razon-clear">Quitar selección</button>
+                  <span id="planta-razon-selcount"></span>
+                </div>
+                <div class="ms-options" id="planta-razon-options"></div>
+              </div>
+            </div>
           </div>
         </div>
         <div class="results-meta">
@@ -4155,26 +4292,112 @@ html = f"""<!DOCTYPE html>
       const S = DATA.stock;
       if (!S || !Array.isArray(S.records)) return;
       const byId = id => document.getElementById(id);
-      const mesSel = byId('planta-filter-mes');
       const anioSel = byId('planta-filter-anio');
       const estadoSel = byId('planta-filter-estado');
-      const razonSel = byId('planta-filter-razon');
       const folioInput = byId('planta-filter-folio');
       const resetBtn = byId('planta-reset');
-      if (!mesSel) return;
+      if (!byId('planta-mes-toggle')) return;
+
+      // Componente reutilizable de multi-selección con checkboxes y buscador opcional.
+      const dropdowns = [];
+      function makeMultiSelect(prefix, items, opts) {{
+        opts = opts || {{}};
+        const toggle = byId(prefix + '-toggle');
+        const labelEl = byId(prefix + '-label');
+        const panel = byId(prefix + '-panel');
+        const optionsEl = byId(prefix + '-options');
+        const clearBtn = byId(prefix + '-clear');
+        const selCount = byId(prefix + '-selcount');
+        const searchEl = byId(prefix + '-search');
+        const selected = new Set();
+        let onChange = () => {{}};
+
+        optionsEl.innerHTML = items.map(it =>
+          `<label class="ms-option" data-search="${{escapeHtml(String(it.label || '').toLowerCase())}}">`
+          + `<input type="checkbox" value="${{it.value}}" />`
+          + `<span>${{escapeHtml(it.label)}}</span></label>`).join('');
+
+        function labelForValue(val) {{
+          const found = items.find(it => String(it.value) === String(val));
+          return found ? found.label : String(val);
+        }}
+        function updateLabel() {{
+          const n = selected.size;
+          labelEl.textContent = n === 0 ? '(Todas)'
+            : n === 1 ? labelForValue([...selected][0])
+            : n + ' seleccionadas';
+          if (selCount) selCount.textContent = n ? (n + ' elegidas') : '';
+        }}
+
+        optionsEl.addEventListener('change', ev => {{
+          const cb = ev.target;
+          if (cb && cb.type === 'checkbox') {{
+            const val = opts.numeric ? Number(cb.value) : cb.value;
+            if (cb.checked) selected.add(val); else selected.delete(val);
+            updateLabel();
+            onChange();
+          }}
+        }});
+        clearBtn.addEventListener('click', () => {{
+          selected.clear();
+          optionsEl.querySelectorAll('input:checked').forEach(cb => {{ cb.checked = false; }});
+          updateLabel();
+          onChange();
+        }});
+        if (searchEl) {{
+          searchEl.addEventListener('input', () => {{
+            const q = searchEl.value.trim().toLowerCase();
+            optionsEl.querySelectorAll('.ms-option').forEach(el => {{
+              el.classList.toggle('is-hidden', !!q && !el.dataset.search.includes(q));
+            }});
+          }});
+        }}
+        toggle.addEventListener('click', () => {{
+          const isOpen = !panel.hidden;
+          dropdowns.forEach(d => d.close());
+          if (!isOpen) {{
+            panel.hidden = false;
+            toggle.setAttribute('aria-expanded', 'true');
+            if (searchEl) searchEl.focus();
+          }}
+        }});
+
+        const api = {{
+          getSelected: () => selected.size ? selected : null,
+          reset: () => {{
+            selected.clear();
+            optionsEl.querySelectorAll('input:checked').forEach(cb => {{ cb.checked = false; }});
+            if (searchEl) {{
+              searchEl.value = '';
+              optionsEl.querySelectorAll('.ms-option').forEach(el => el.classList.remove('is-hidden'));
+            }}
+            updateLabel();
+          }},
+          close: () => {{ panel.hidden = true; toggle.setAttribute('aria-expanded', 'false'); }},
+          setOnChange: fn => {{ onChange = fn; }}
+        }};
+        dropdowns.push(api);
+        updateLabel();
+        return api;
+      }}
+
+      document.addEventListener('click', ev => {{
+        if (!ev.target.closest('.ms-dropdown')) dropdowns.forEach(d => d.close());
+      }});
 
       const clientOptions = S.clients
         .map((name, idx) => ({{ idx, name }}))
         .sort((a, b) => a.name.localeCompare(b.name, 'es'));
 
-      mesSel.innerHTML = '<option value="">(Todas)</option>' +
-        S.months.map(m => `<option value="${{m}}">${{escapeHtml(S.monthLabels[String(m)] || String(m))}}</option>`).join('');
+      const mesMS = makeMultiSelect('planta-mes',
+        S.months.map(m => ({{ value: m, label: S.monthLabels[String(m)] || String(m) }})), {{ numeric: true }});
+      const razonMS = makeMultiSelect('planta-razon',
+        clientOptions.map(o => ({{ value: o.idx, label: o.name }})), {{ numeric: true }});
+
       anioSel.innerHTML = '<option value="">(Todas)</option>' +
         S.years.map(y => `<option value="${{y}}">${{y}}</option>`).join('');
       estadoSel.innerHTML = '<option value="">(Todas)</option>' +
         S.estados.map((e, i) => `<option value="${{i}}">${{escapeHtml(e)}}</option>`).join('');
-      razonSel.innerHTML = clientOptions
-        .map(opt => `<option value="${{opt.idx}}">${{escapeHtml(opt.name)}}</option>`).join('');
 
       // Nota global de cobertura de datos (sobre el total, sin filtros)
       const totalRecs = S.records.length;
@@ -4189,19 +4412,18 @@ html = f"""<!DOCTYPE html>
         'Se completará automáticamente al integrar el API de la plataforma.';
 
       function render() {{
-        const mes = mesSel.value ? Number(mesSel.value) : null;
+        const meses = mesMS.getSelected();
         const anio = anioSel.value ? Number(anioSel.value) : null;
         const estado = estadoSel.value !== '' ? Number(estadoSel.value) : null;
         const folioText = (folioInput.value || '').trim();
-        const razones = Array.from(razonSel.selectedOptions).map(o => Number(o.value));
-        const razonSet = razones.length ? new Set(razones) : null;
+        const razonSet = razonMS.getSelected();
 
         const agg = new Map();
         let matched = 0;
         let matchedSinKilos = 0;
         for (const rec of S.records) {{
           const [year, month, clientIdx, folio, estadoIdx, materialIdx, tipo, kilos, missing] = rec;
-          if (mes !== null && month !== mes) continue;
+          if (meses && !meses.has(month)) continue;
           if (anio !== null && year !== anio) continue;
           if (estado !== null && estadoIdx !== estado) continue;
           if (razonSet && !razonSet.has(clientIdx)) continue;
@@ -4254,14 +4476,16 @@ html = f"""<!DOCTYPE html>
           : '';
       }}
 
-      [mesSel, anioSel, estadoSel, razonSel].forEach(el => el.addEventListener('change', render));
+      mesMS.setOnChange(render);
+      razonMS.setOnChange(render);
+      [anioSel, estadoSel].forEach(el => el.addEventListener('change', render));
       folioInput.addEventListener('input', render);
       resetBtn.addEventListener('click', () => {{
-        mesSel.value = '';
+        mesMS.reset();
+        razonMS.reset();
         anioSel.value = '';
         estadoSel.value = '';
         folioInput.value = '';
-        Array.from(razonSel.options).forEach(o => {{ o.selected = false; }});
         render();
       }});
       render();

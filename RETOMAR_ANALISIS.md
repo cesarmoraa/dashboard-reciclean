@@ -32,13 +32,13 @@ Sirve para retomar trabajo sin perder contexto técnico, funcional ni operativo.
 
 ## Regla vigente de datos
 - El generador usa siempre el archivo más reciente `vales_detallada_*.xlsx`
-- Archivo más reciente al cierre de esta bitácora: `vales_detallada_2026-05-14_17-28-21.xlsx`
+- Archivo más reciente al cierre de esta bitácora: `vales_detallada_2026-07-28_02-13-24.xlsx`
 - El dashboard hoy expone una ventana seleccionable de:
-  - `Febrero 2026`
-  - `Marzo 2026`
   - `Abril 2026`
   - `Mayo 2026`
-- La ventana general reconocida por el archivo es: `Febrero a mayo 2026`
+  - `Junio 2026`
+  - `Julio 2026`
+- La ventana general reconocida por el archivo es: `hasta julio 2026`
 - El criterio de selección del archivo se corrigió para usar el timestamp del nombre (`vales_detallada_YYYY-MM-DD_HH-MM-SS.xlsx`) y no el `mtime` del archivo, porque OneDrive podía dejar un corte más nuevo fuera del dashboard.
 
 ## Estructura importante
@@ -386,6 +386,63 @@ Resultado:
 - Dashboard regenerado correctamente con el archivo más reciente detectado por timestamp del nombre
 - `sourceFile` del HTML actualizado al corte `17/05/2026`
 - Ventana histórica conservada en `Febrero a mayo 2026`
+
+## Refresh de datos: julio 2026 (PR #1)
+Fecha:
+- `27/07/2026`
+
+Qué se hizo:
+- Se subieron al repo cuatro exportes que estaban sin trackear: `vales_detallada_2026-05-12`, `2026-05-14`, `2026-05-17` y `2026-07-28`.
+- Se regeneró el dashboard con el corte más reciente `vales_detallada_2026-07-28_02-13-24.xlsx`.
+- El panel ahora cubre datos hasta `julio 2026` (periodos 2026-04 a 2026-07).
+
+Flujo usado:
+- Como `main` es la rama de deploy de Render, el trabajo se hizo en la rama `add-vales-may-jul-2026` y se abrió el PR #1.
+- PR: `https://github.com/cesarmoraa/dashboard-reciclean/pull/1`
+- Se mergeó con squash a `main` (commit `ef6882c`), lo que dispara el deploy automático en Render.
+
+Nota:
+- `Respuesta_gerente_reciclean.docx` se dejó fuera del repo a propósito por ser correspondencia interna y tratarse de un repo público. Sigue solo en la carpeta local.
+
+## Pendiente mayor: conexión directa al API (actualización automática)
+Contexto:
+- El usuario recibirá "en estos días" (fin de julio / inicio de agosto 2026) un API para conectar directo a `https://plataforma-virtual.com/reciclean/recicladmin.php`.
+
+Requisitos confirmados por el usuario:
+- El API debe devolver **el mismo detalle de hoy** (los mismos vales/registros que trae el Excel `vales_detallada`).
+- Quiere **actualización automática**: cada **pesaje** es un registro que debe aparecer solo en el panel, sin pasos manuales.
+
+Enfoque acordado:
+- Pasar de HTML estático a **dinámico**: `server.js` en Render consulta el API en vivo al abrir el dashboard, para que un pesaje nuevo aparezca al recargar la página (sin descargar Excel, sin regenerar, sin commits ni redeploys).
+- Alternativa descartada por retraso: cron que baje datos y regenere el HTML cada X minutos.
+
+Falta definir cuando llegue el API:
+- Formato de acceso (token / API key vs usuario+password).
+- Forma exacta de la respuesta (JSON/CSV y campos).
+
+## Nuevo tab: Stock en Planta
+Fecha:
+- `27/07/2026`
+
+Contexto:
+- Un contacto pidió por WhatsApp poder ver el "stock en planta" (kilos disponibles) como una tabla dinámica: Material × Recepción/Despacho, con filtros Mes, Razón Social, Folio, Año y Estado.
+
+Implementado:
+- Nuevo tab `Stock en Planta` en la barra de secciones (`data-tab-target="stock"`).
+- Dataset `stock` generado en Python (`build_stock_dataset`) sobre `full_df`: por cada línea de material se guarda año, mes, cliente, folio, estado, material, tipo (Recepción=0 / Despacho=1 / Sin clasificar=2), kilos (abs de PESO FINAL, prorrateado si el vale tiene varios materiales) y flag de "sin kilos".
+- Frontend: filtros (Mes, Año, Folio exacto/parcial, Estado, Razón Social multi-selección) + tabla pivote Material × Recepción / Despacho / Total general (= Recepción − Despacho), ordenada por stock, con Total general en el pie y botón "Limpiar filtros".
+- Banner ámbar de datos parciales visible en el tab.
+
+Limitación de datos (importante):
+- El export actual `vales_detallada` NO trae kilos en los vales con varios materiales (DESC PRODUCTO con `|`) ni etiqueta Recepción/Despacho en una parte de los vales. Por eso el stock queda subestimado respecto al cuadro real de la plataforma (que maneja kilos por material).
+- El stock exacto y automático saldrá al integrar el API de `recicladmin.php` (ver pendiente mayor arriba). Este tab es la base que ya queda lista para conectarse.
+
+Detalle técnico a recordar:
+- Los IDs del tab usan prefijo `planta-` (no `stock-`) porque el tab de Riesgos ya tenía una tabla con `id="stock-table-body"` (Stock teórico kg). Reusar `stock-` rompía ambas tablas por colisión de `getElementById`.
+
+Estado:
+- Implementado y verificado en local (filtros y pivote OK; tab de Riesgos intacto).
+- Publicación: según decisión de la sesión.
 
 ## Regla de mantenimiento para futuras sesiones
 Antes de cerrar cualquier cambio relevante:

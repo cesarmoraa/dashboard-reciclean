@@ -1094,6 +1094,71 @@ for period in dashboard_periods:
         },
     }
 
+def build_stock_dataset(frame: pd.DataFrame) -> dict[str, object]:
+    """Stock en planta: recepción (ingreso) - despacho (egreso) por material.
+
+    Nota de datos: en el export actual, los vales con varios materiales
+    (DESC PRODUCTO separado por '|') no traen kilos en PESO FINAL, y una parte
+    de los vales no trae etiqueta Recepción/Despacho. Esos casos se cuentan pero
+    no aportan kilos, por lo que el stock queda subestimado hasta integrar el API.
+    """
+    client_index: dict[str, int] = {}
+    material_index: dict[str, int] = {}
+    estado_index: dict[str, int] = {}
+
+    def idx(store: dict[str, int], value: str) -> int:
+        if value not in store:
+            store[value] = len(store)
+        return store[value]
+
+    records: list[list[object]] = []
+    for _, row in frame.iterrows():
+        fecha = row["FECHA_DT"]
+        if pd.isna(fecha):
+            continue
+        year = int(fecha.year)
+        month = int(fecha.month)
+        client = row["client"]
+        folio = int(row["FOLIO"]) if not pd.isna(row["FOLIO"]) else 0
+        estado = normalize_text(row["ESTADO"])
+        tipo_raw = str(row["receptionDispatch"]).lower()
+        if "recep" in tipo_raw:
+            tipo_code = 0
+        elif "despa" in tipo_raw:
+            tipo_code = 1
+        else:
+            tipo_code = 2
+        materials = split_materials(row["DESC PRODUCTO"])
+        raw_weight = row["weight"]
+        missing = 1 if pd.isna(raw_weight) else 0
+        weight_value = 0.0 if pd.isna(raw_weight) else abs(float(raw_weight))
+        share = weight_value / len(materials) if materials else 0.0
+        for material in materials:
+            records.append([
+                year,
+                month,
+                idx(client_index, client),
+                folio,
+                idx(estado_index, estado),
+                idx(material_index, material),
+                tipo_code,
+                round(share, 2),
+                missing,
+            ])
+
+    return {
+        "clients": list(client_index.keys()),
+        "materials": list(material_index.keys()),
+        "estados": list(estado_index.keys()),
+        "years": sorted({int(rec[0]) for rec in records}),
+        "months": sorted({int(rec[1]) for rec in records}),
+        "monthLabels": {str(num): MONTHS_ES[num].capitalize() for num in range(1, 13)},
+        "records": records,
+    }
+
+
+stock_dataset = build_stock_dataset(full_df)
+
 data = {
     "meta": {
         "title": "Dashboard Ejecutivo de Registros Operacionales",
@@ -1130,6 +1195,7 @@ data = {
         "lookups": lookup_sources,
         "rows": compact_rows,
     },
+    "stock": stock_dataset,
 }
 
 html = f"""<!DOCTYPE html>
@@ -2662,6 +2728,7 @@ html = f"""<!DOCTYPE html>
       <button type="button" class="tab-button" data-tab-target="historico">Histórico y Tendencias</button>
       <button type="button" class="tab-button" data-tab-target="riesgos">Riesgos e Inconsistencias</button>
       <button type="button" class="tab-button" data-tab-target="calidad">Calidad y Brechas</button>
+      <button type="button" class="tab-button" data-tab-target="stock">Stock en Planta</button>
     </nav>
 
     <div id="print-root" aria-hidden="true"></div>
@@ -3073,6 +3140,74 @@ html = f"""<!DOCTYPE html>
               <tbody id="gaps-table-body"></tbody>
             </table>
           </div>
+        </article>
+      </section>
+    </section>
+
+    <section class="tab-pane" data-tab-pane="stock">
+      <div class="section-title">
+        <div>
+          <h2>Stock en Planta</h2>
+          <p>Kilos disponibles por material: recepción (ingreso) menos despacho (egreso), con los mismos filtros del cuadro solicitado.</p>
+        </div>
+        <div class="section-badge">Total general = Recepción − Despacho</div>
+      </div>
+
+      <div id="planta-data-note" style="margin: 0 0 18px; padding: 14px 16px; border-radius: 14px; background: #fff7e6; border: 1px solid #f0c869; color: #7a5300; font-size: 0.9rem; line-height: 1.45;"></div>
+
+      <section class="filters-card">
+        <div class="filters-grid">
+          <div class="field">
+            <label for="planta-filter-mes">Mes</label>
+            <select id="planta-filter-mes"></select>
+          </div>
+          <div class="field">
+            <label for="planta-filter-anio">Año</label>
+            <select id="planta-filter-anio"></select>
+          </div>
+          <div class="field">
+            <label for="planta-filter-folio">Folio</label>
+            <input id="planta-filter-folio" type="search" placeholder="Folio exacto o parcial" />
+          </div>
+          <div class="field">
+            <label for="planta-filter-estado">Estado Folio</label>
+            <select id="planta-filter-estado"></select>
+          </div>
+          <div class="field" style="grid-column: span 2;">
+            <label for="planta-filter-razon">Razón Social <span class="footnote">(Ctrl/Cmd para elegir varios)</span></label>
+            <select id="planta-filter-razon" multiple size="4"></select>
+          </div>
+        </div>
+        <div class="results-meta">
+          <div id="planta-results-count"></div>
+          <button type="button" class="ghost-button" id="planta-reset">Limpiar filtros</button>
+        </div>
+      </section>
+
+      <section class="panel-grid">
+        <article class="panel span-12">
+          <div class="panel-header">
+            <div>
+              <h3 class="panel-title">Stock por material (Kilos)</h3>
+              <p class="panel-subtitle">Recepción, Despacho y Total general (stock disponible) según los filtros activos.</p>
+            </div>
+            <span class="panel-note">Kilos</span>
+          </div>
+          <div class="table-wrap">
+            <table class="simple-table">
+              <thead>
+                <tr>
+                  <th>Material</th>
+                  <th style="text-align:right;">Recepción</th>
+                  <th style="text-align:right;">Despacho</th>
+                  <th style="text-align:right;">Total general</th>
+                </tr>
+              </thead>
+              <tbody id="planta-table-body"></tbody>
+              <tfoot id="planta-table-foot"></tfoot>
+            </table>
+          </div>
+          <p class="footnote" id="planta-footnote"></p>
         </article>
       </section>
     </section>
@@ -4009,7 +4144,124 @@ html = f"""<!DOCTYPE html>
       initGlobalBranchSelect();
       initHistoryRangeSelect();
       initFilters();
+      initStock();
       rerenderDashboard();
+    }}
+
+    function initStock() {{
+      const S = DATA.stock;
+      if (!S || !Array.isArray(S.records)) return;
+      const byId = id => document.getElementById(id);
+      const mesSel = byId('planta-filter-mes');
+      const anioSel = byId('planta-filter-anio');
+      const estadoSel = byId('planta-filter-estado');
+      const razonSel = byId('planta-filter-razon');
+      const folioInput = byId('planta-filter-folio');
+      const resetBtn = byId('planta-reset');
+      if (!mesSel) return;
+
+      const clientOptions = S.clients
+        .map((name, idx) => ({{ idx, name }}))
+        .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+
+      mesSel.innerHTML = '<option value="">(Todas)</option>' +
+        S.months.map(m => `<option value="${{m}}">${{escapeHtml(S.monthLabels[String(m)] || String(m))}}</option>`).join('');
+      anioSel.innerHTML = '<option value="">(Todas)</option>' +
+        S.years.map(y => `<option value="${{y}}">${{y}}</option>`).join('');
+      estadoSel.innerHTML = '<option value="">(Todas)</option>' +
+        S.estados.map((e, i) => `<option value="${{i}}">${{escapeHtml(e)}}</option>`).join('');
+      razonSel.innerHTML = clientOptions
+        .map(opt => `<option value="${{opt.idx}}">${{escapeHtml(opt.name)}}</option>`).join('');
+
+      // Nota global de cobertura de datos (sobre el total, sin filtros)
+      const totalRecs = S.records.length;
+      const sinKilos = S.records.filter(r => r[8] === 1).length;
+      const sinTipo = S.records.filter(r => r[6] === 2).length;
+      const pct = totalRecs ? Math.round((sinKilos / totalRecs) * 100) : 0;
+      byId('planta-data-note').innerHTML =
+        '<strong>Datos parciales:</strong> el export actual no trae kilos en ' +
+        formatInteger(sinKilos) + ' de ' + formatInteger(totalRecs) + ' líneas (' + pct + '%), ' +
+        'principalmente vales con varios materiales combinados; además ' + formatInteger(sinTipo) +
+        ' líneas no indican Recepción/Despacho. Por eso el stock aquí queda subestimado. ' +
+        'Se completará automáticamente al integrar el API de la plataforma.';
+
+      function render() {{
+        const mes = mesSel.value ? Number(mesSel.value) : null;
+        const anio = anioSel.value ? Number(anioSel.value) : null;
+        const estado = estadoSel.value !== '' ? Number(estadoSel.value) : null;
+        const folioText = (folioInput.value || '').trim();
+        const razones = Array.from(razonSel.selectedOptions).map(o => Number(o.value));
+        const razonSet = razones.length ? new Set(razones) : null;
+
+        const agg = new Map();
+        let matched = 0;
+        let matchedSinKilos = 0;
+        for (const rec of S.records) {{
+          const [year, month, clientIdx, folio, estadoIdx, materialIdx, tipo, kilos, missing] = rec;
+          if (mes !== null && month !== mes) continue;
+          if (anio !== null && year !== anio) continue;
+          if (estado !== null && estadoIdx !== estado) continue;
+          if (razonSet && !razonSet.has(clientIdx)) continue;
+          if (folioText && !String(folio).includes(folioText)) continue;
+          matched++;
+          if (missing === 1) matchedSinKilos++;
+          let bucket = agg.get(materialIdx);
+          if (!bucket) {{ bucket = {{ recepcion: 0, despacho: 0 }}; agg.set(materialIdx, bucket); }}
+          if (tipo === 0) bucket.recepcion += kilos;
+          else if (tipo === 1) bucket.despacho += kilos;
+        }}
+
+        const rows = Array.from(agg.entries())
+          .map(([materialIdx, b]) => ({{
+            material: S.materials[materialIdx],
+            recepcion: b.recepcion,
+            despacho: b.despacho,
+            total: b.recepcion - b.despacho
+          }}))
+          .filter(r => r.recepcion !== 0 || r.despacho !== 0)
+          .sort((a, b) => b.total - a.total);
+
+        const tbody = byId('planta-table-body');
+        if (!rows.length) {{
+          tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:22px; color:var(--muted);">Sin registros con kilos para los filtros aplicados.</td></tr>';
+        }} else {{
+          tbody.innerHTML = rows.map(r => `
+            <tr>
+              <td>${{escapeHtml(r.material)}}</td>
+              <td style="text-align:right;">${{formatInteger(r.recepcion)}}</td>
+              <td style="text-align:right; color:${{r.despacho ? '#c0392b' : 'inherit'}};">${{r.despacho ? '-' + formatInteger(r.despacho) : '0'}}</td>
+              <td style="text-align:right; font-weight:600;">${{formatInteger(r.total)}}</td>
+            </tr>`).join('');
+        }}
+
+        const totRecep = rows.reduce((s, r) => s + r.recepcion, 0);
+        const totDesp = rows.reduce((s, r) => s + r.despacho, 0);
+        byId('planta-table-foot').innerHTML = rows.length ? `
+          <tr style="border-top:2px solid var(--border); font-weight:700;">
+            <td>Total general</td>
+            <td style="text-align:right;">${{formatInteger(totRecep)}}</td>
+            <td style="text-align:right; color:${{totDesp ? '#c0392b' : 'inherit'}};">${{totDesp ? '-' + formatInteger(totDesp) : '0'}}</td>
+            <td style="text-align:right;">${{formatInteger(totRecep - totDesp)}}</td>
+          </tr>` : '';
+
+        byId('planta-results-count').textContent =
+          formatInteger(matched) + ' líneas consideradas · ' + rows.length + ' materiales';
+        byId('planta-footnote').textContent = matchedSinKilos
+          ? (formatInteger(matchedSinKilos) + ' líneas del filtro actual no tienen kilos registrados y no suman al stock.')
+          : '';
+      }}
+
+      [mesSel, anioSel, estadoSel, razonSel].forEach(el => el.addEventListener('change', render));
+      folioInput.addEventListener('input', render);
+      resetBtn.addEventListener('click', () => {{
+        mesSel.value = '';
+        anioSel.value = '';
+        estadoSel.value = '';
+        folioInput.value = '';
+        Array.from(razonSel.options).forEach(o => {{ o.selected = false; }});
+        render();
+      }});
+      render();
     }}
 
     async function verifySession() {{

@@ -1121,6 +1121,9 @@ def build_stock_dataset(frame: pd.DataFrame) -> dict[str, object]:
         client = row["client"]
         folio = int(row["FOLIO"]) if not pd.isna(row["FOLIO"]) else 0
         estado = normalize_text(row["ESTADO"])
+        # Estado 9: vales anulados/excluidos, no cuentan para stock en planta.
+        if estado == "9":
+            continue
         tipo_raw = str(row["receptionDispatch"]).lower()
         if "recep" in tipo_raw:
             tipo_code = 0
